@@ -1,0 +1,16 @@
+{
+  "name": "ki1r0y-rules",
+  "version": "0.0.1",
+  "description": "Cached, demand-driven computations with dependency-directed-backtracking and full support for Promises.",
+  "main": "index.js",
+  "files": ["index.js", "spec/spec.js"],
+  "devDependencies": {
+      "ki1r0y-test": "^0.0.01"
+  },
+  "scripts": {
+      "build": "browserify index.js > browser.js",
+      "test": "ktest"
+  },
+  "author": "ki1r0y",
+  "license": "MIT"
+}
