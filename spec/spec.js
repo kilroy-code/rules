@@ -1,7 +1,7 @@
 /*global describe, it, require*/
 "use strict";
-var Rule = require('@ki1r0y/rules');
-
+var Rule = require('@kilroy-code/rules');
+// TODO: eager rules
 describe('A Rule', () => {
   describe('example', () => {
     it('works with instances', () => {
@@ -222,6 +222,46 @@ describe('A Rule', () => {
       that.required = 5;
       testAnInstance(that);
     });
+    describe('overrides rules from later on inheritance chain', () => {
+      class OverrideExample {
+        theRule() { return 'compiled in'; }
+        dependant(self) { return 'got ' + self.theRule; }
+      }
+      class Relabled extends OverrideExample {
+        theRule() { return 'compiled override'; }
+      }
+      Rule.rulify(OverrideExample.prototype);
+      Rule.rulify(Relabled.prototype);
+      var example, other;
+      beforeEach(() => {
+        example = new OverrideExample();
+        other = new Relabled();
+      });
+      it('follows compiled-in rule', () => {
+        expect(example.theRule).toBe('compiled in');
+        expect(example.dependant).toBe('got compiled in');
+        example.theRule = 'changed';
+        expect(example.dependant).toBe('got changed');
+        expect(other.dependant).toBe('got compiled override');
+      });
+      it('follow attached override', () => {
+        Rule.attach(example, 'theRule', () => other.dependant);
+        expect(example.theRule).toBe('got compiled override');
+        expect(example.dependant).toBe('got got compiled override');
+
+        other.theRule = 'changed';
+        expect(example.dependant).toBe('got got changed');
+
+        example.theRule = 'instance value changed';
+        expect(example.dependant).toBe('got instance value changed');
+
+        other.theRule = 'upstream changed';
+        expect(example.dependant).toBe('got instance value changed'); // change to upstream doesn't matter
+
+        example.theRule = undefined; // reset
+        expect(example.dependant).toBe('got got upstream changed'); // now it does
+      });
+    });
     it('does not track dependencies in callbacks', (done) => {
       function fetchFromDatabase(key, cb) {
         setTimeout(() => cb(null, key + 2), 10);
@@ -294,12 +334,14 @@ describe('A Rule', () => {
       }
       return Date.now() - start;
     }
-    function timeRule(array) {
+    function timeRule(array, label) {
       var i, size = array.length, start = Date.now(), instance;
       for (i = 0; i < size; i++) {
         seed = array[i].computeRule;
       }
-      return Date.now() - start;
+      var elapsed = Date.now() - start
+      if (label) console.log(`${label} averaged ${elapsed * 1000 / array.length} ms / rule.`);
+      return elapsed
     }
     beforeEach(() => {
       data = Array(100000);
@@ -309,12 +351,12 @@ describe('A Rule', () => {
       timeRule(t);
     });
     it('is within an order of magnitude of a normal method for first execution', () => {
-      expect(timeRule(data)).toBeLessThan(25 * timeMethod(data));
+      expect(timeRule(data, "First")).toBeLessThan(25 * timeMethod(data));
     });
     it('is within normal method for subsequent execution', () => {
       timeMethod(data);
       timeRule(data);
-      expect(timeRule(data)).toBeLessThan(10 * timeMethod(data));
+      expect(timeRule(data, "Subsequent")).toBeLessThan(10 * timeMethod(data));
     });
   });
   describe('with Promises', () => {
@@ -648,6 +690,112 @@ describe('A Rule', () => {
       expect(counts[1]).toBe(2);
       expect(component.ref2).toBe('b'); 
       expect(counts[2]).toBe(2);            
+    });
+  });
+  // TODO: if input.a changes, b.value should not re-fire. (prove this by examining side effects)
+  // make a version of this that works the same way, but from a list [a, b],
+  // with another composite that references list[0].value and list[1].value.
+  // That should all work the same upon change.
+  // But if the list length changes, say, [a, b, c], then the composite sum should change.
+  // (Even as a list, though, changing a.input should not refire list[1].value.)
+  describe('composite', function () {
+    // The following illustrates the differences between different plausible ways of creating
+    // a rule system with parent/child relationships.
+    describe('with child construction that references parent values', function () {
+      // This will re-instantiate the tree structure perhaps more than is wanted.
+      let computations = [];
+      class Child {
+        constructor(name, value1, value2) {
+          computations.push(`construct ${name} ${value1} ${value2}`);
+          this.name = name;
+          this.input1 = value1;
+          this.input2 = value2;
+        }
+        computationOnValue1(self) {
+          computations.push(`simple compute ${self.name}`);
+          return self.input1 * 2;
+        }
+        expensiveComputationOnValue2(self) {
+          computations.push(`expensive compute ${self.name}`);
+          return Math.sqrt(self.input2);
+        }
+        total(self) { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
+      }
+      class Parent {
+        parameterA() { return 1; }
+        parameterB() { return 2; }
+        parameterC() { return 9; }
+        a(self) { return new Child('a', self.parameterA, self.parameterC); }
+        b(self) { return new Child('b', self.parameterB, self.parameterC); }
+        sum(self) { return self.a.total + self.b.total; }
+      }
+      Rule.rulify(Child.prototype);
+      Rule.rulify(Parent.prototype);
+      let parent = new Parent();
+      it('will re-instantiate children and all their otherwise unchanged computations', function () {
+        expect(parent.sum).toBe(12);
+        expect(computations.join('\n')).toBe(
+          `construct a 1 9
+simple compute a
+expensive compute a
+construct b 2 9
+simple compute b
+expensive compute b`);
+        computations = [];
+        parent.parameterA = 3;
+        expect(parent.sum).toBe(16);
+        expect(computations.join('\n')).toBe(
+          `construct a 3 9
+simple compute a
+expensive compute a`);
+      });
+    });
+    describe('with child construction that references parent and constant input names', function () {
+      // This will not re-instantiate the tree structure.
+      let computations = [];
+      class Child {
+        constructor(name, parent, name1, name2) {
+          computations.push(`construct ${name} ${name1} ${name2}`);
+          this.name = name;
+          this.parent = parent;
+          this.name1 = name1;
+          this.name2 = name2;
+        }
+        computationOnValue1(self) {
+          computations.push(`simple compute ${self.name}`);
+          return self.parent[this.name1] * 2;
+        }
+        expensiveComputationOnValue2(self) {
+          computations.push(`expensive compute ${self.name}`);
+          return Math.sqrt(self.parent[this.name2]);
+        }
+        total(self) { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
+      }
+      class Parent {
+        parameterA() { return 1; }
+        parameterB() { return 2; }
+        parameterC() { return 9; }
+        a(self) { return new Child('a', self, 'parameterA', 'parameterC'); }
+        b(self) { return new Child('b', self, 'parameterB', 'parameterC'); }
+        sum(self) { return self.a.total + self.b.total; }
+      }
+      Rule.rulify(Child.prototype);
+      Rule.rulify(Parent.prototype);
+      let parent = new Parent();
+      it('will not re-instantiate children nor their otherwise unchanged computations', function () {
+        expect(parent.sum).toBe(12);
+        expect(computations.join('\n')).toBe(
+          `construct a parameterA parameterC
+simple compute a
+expensive compute a
+construct b parameterB parameterC
+simple compute b
+expensive compute b`);
+        computations = [];
+        parent.parameterA = 3;
+        expect(parent.sum).toBe(16);
+        expect(computations.join('\n')).toBe(`simple compute a`); // No need to redo expensive computation
+      });
     });
   });
 });

@@ -1,14 +1,27 @@
 /*global exports*/
 "use strict";
 
-function Rule(instance, key, init) { // instance must be the specific instance, not the __proto__.
+const util = require('util'); // For printing the error when there is a circular dependency.
+
+function simpleReset(instance, key) {
+  instance[key] = undefined;
+}
+function eagerReset(instance, key) {
+  instance[key] = undefined;
+  process.nextTick(() => instance[key]);
+}
+
+function Rule(instance, key, init, onreset = simpleReset) { // instance must be the specific instance, not the __proto__.
   // usedBy and requires are other Rules.
   this.key = key; // FIXME for debugging
+  // TBD: Is this a memory leak when usedBy is the only reference to rules in objects thare no longer otherwise live?
+  // Outline of potential fix: a global weakmap from rule => array-of-usedby-rules, and insert a reference to that array in each
+  // usedby rule. But then the array doesn't disappear until ALL the usedBy are gone. Hmm...?
   this.usedBy = [];
   this.requires = [];
+  this.cached = init;
   // Subtle: This will use the setter defined on instance when this Rule is attached to instance. The setter has side-effects.
-  this.reset = function () { instance[key] = undefined; };
-  if (init !== undefined) this.cached = init;
+  this.reset = function () { onreset(instance, key); };
 }
 
 // Bookkeeping for references.
@@ -29,7 +42,7 @@ Rule.prototype.resetReferences = function resetReferences() {
     required.usedBy = required.usedBy.filter(notUs);
   });
   usedBy.forEach(function (usedBy) {
-    usedBy.reset();  // Does not force them to be re-evaluated yet.
+    usedBy.reset();
   });
 }
 
@@ -90,7 +103,7 @@ RuleStack.prototype.noteComputing = function noteComputing(rule) {
 RuleStack.prototype.restoreComputing = function restoreComputing(rule) {
   var add = rule.addReference.bind(rule);
   rule.collectingReferences.forEach(add);
-  delete rule.collectingRefences;
+  delete rule.collectingReferences;
   this.pop();
 }
 RuleStack.prototype.isCircularReference = function isCircularReference(rule) {
@@ -138,7 +151,7 @@ function proxyRules(object, rulesStore, ruleKey) {
 
 
 // Expression-based way to create rules, on object instances or prototypes.
-Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable) {
+Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable, onreset = simpleReset) {
   // Defines a Rule property on object, which may be an individual instance or a prototype.
   // If a method function is provided it is used to lazily calculate the value when read, if not already set.
   // The method will be passed one argument, defaulting to the actual specific instance to which the rule property is attached.
@@ -152,10 +165,11 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable) 
     // The actual Rule object is added lazilly, only when the property is first accessed (by get or set).
     var rule = instance[ruleKey];
     if (!rule) {
-      rule = instance[ruleKey] = new Rule(instance, key, (init instanceof Object) ? Rule.rulify(init) : init);
+      rule = instance[ruleKey] = new Rule(instance, key, (init instanceof Object) ? Rule.rulify(init) : init, onreset);
     }
     return rule;
   }
+  delete objectOrProto[ruleKey]; // attach clears any previous rule.
   Object.defineProperty(objectOrProto, key, {
     // Within these functions, objectOrProto might not equal this, as objectOrProto could be a __proto__.
     configurable: isRedefineable,
@@ -165,8 +179,8 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable) 
       if ((cached === undefined) || rule.resolve) {
         if (method) {
           if (Rule.beingComputed.isCircularReference(rule)) {
-            throw new Error("Circular Rule depends on itself: " // FIXME debugging
-                            + require('util').inspect({rule: rule, ruleStack: Rule.beingComputed}, {depth: 4}));
+            throw new Error("Circular Rule depends on itself: "
+                            + util.inspect({rule: rule, ruleStack: Rule.beingComputed}, {depth: 2}));
           }
           try {
             Rule.beingComputed.noteComputing(rule);
@@ -183,7 +197,9 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable) 
           rule.cached = cached;
         }
         if (cached === undefined) { // Whether we had a method or not.
-          throw new Error("No value for " + key);
+          const message = "No Rule value returned for " + key + " in " + objectOrProto.toString();
+          throw new Error(message);
+          //console.log(message);
         }
       }
       rule.ensurePromiseResolution(cached, key);
@@ -202,20 +218,20 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable) 
 }
 
 // Convert an entire instance or prototype, or list to Rules.
-Rule.rulify = function rulify(object, optionalPropertiesToRulify) {
+Rule.rulify = function rulify(object, optionalPropertiesToRulify, eagerRules = []) {
   if (Array.isArray(object)) { // We treat lists differently. See README.md.
     return proxyRules(object,
                       new Array(object.length),
                       function rulifiablePropertyName(key) { // We don't want to rulify array methods
                         if (key === 'length') return 'trackedLength'; // Not length!
-                        if (/^[0-9]+$/.test(key)) return key; // integer keys are good
+                        if (/^[0-9]+$/.test(key.toString())) return key.toString(); // integer keys are good
                         return false;
                       });
   }
   // Everything else - covers all and only the current properties (and caches and Promises).
   var keys = optionalPropertiesToRulify // FIXME: or get from some static method?
       || Object.getOwnPropertyNames(object).filter(function (prop) { return 'constructor' !== prop; });
-  keys.forEach(function (key) { return Rule.attach(object, key, object[key]); });
+  keys.forEach(function (key) { Rule.attach(object, key, object[key], false, (eagerRules.includes(key) ? eagerReset : simpleReset)); });
   return object;
 }
 
