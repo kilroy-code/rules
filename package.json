@@ -1,16 +1,31 @@
 {
-  "name": "ki1r0y-rules",
-  "version": "0.0.1",
+  "name": "@ki1r0y/rules",
+  "version": "0.0.2",
   "description": "Cached, demand-driven computations with dependency-directed-backtracking and full support for Promises.",
+  "keywords": [
+    "demand-driven",
+    "memoize",
+    "dependency-directed-backtracking",
+    "promises"
+  ],
   "main": "index.js",
-  "files": ["index.js", "spec/spec.js"],
-  "devDependencies": {
-      "ki1r0y-test": "^0.0.01"
-  },
   "scripts": {
-      "build": "browserify index.js > browser.js",
-      "test": "ktest"
+    "test": "jasmine"
   },
   "author": "ki1r0y",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kilroy-code/rules.git"
+  },
+  "homepage": "https://github.com/kilroy-code/rules#readme",
+  "bugs": {
+    "url": "https://github.com/kilroy-code/rules/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
+  "devDependencies": {
+    "jasmine": "^3.5.0"
+  }
 }
