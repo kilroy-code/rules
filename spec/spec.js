@@ -1,10 +1,9 @@
 /*global describe, it, require*/
 "use strict";
 var Rule = require('@kilroy-code/rules');
-// TODO: eager rules
-describe('A Rule', () => {
-  describe('example', () => {
-    it('works with instances', () => {
+describe('A Rule', function () {
+  describe('example', function () {
+    it('works with instances', function () {
       var box = {};
       Rule.attach(box, 'width');
       Rule.attach(box, 'length');
@@ -27,7 +26,7 @@ describe('A Rule', () => {
       expect(box.area).toBe(1000); // still, not reset
       expect(box.volume).toBe(2000);
     });
-    it('works with classes', () => {
+    it('works with classes', function () {
       class Rectangle {}
       Rule.attach(Rectangle.prototype, 'width');
       Rule.attach(Rectangle.prototype, 'length');
@@ -51,7 +50,7 @@ describe('A Rule', () => {
       expect(box.area).toBe(1000); // still, not reset
       expect(box.volume).toBe(2000);
     });
-    it('converts classes defined conventionally', () => {
+    it('converts classes defined conventionally', function () {
       class Rectangle {
         width() { return 0; }
         length() { return 0; }
@@ -78,7 +77,7 @@ describe('A Rule', () => {
       expect(box.area).toBe(1000); // still, not reset
       expect(box.volume).toBe(2000);
     });
-    it('delays calculation and storage of state until used, allowing use on class prototype', () => {
+    it('delays calculation and storage of state until used, allowing use on class prototype', function () {
       class MyClass {}
       Rule.attach(MyClass.prototype, 'myRule', () => 17);
       var instance1 = new MyClass();
@@ -88,8 +87,48 @@ describe('A Rule', () => {
       expect(instance2.myRule).toBe(17);
       expect(instance1.myRule).toBe(42);
     });
+    it('subclass computation can reference superclass.', function () {
+      class Super {
+        root() { return 3; }
+        foo() { return this.root; }
+        bar() { return this.foo + 1; }
+        baz() { return 10; }
+      }
+      class Sub extends Super {
+        root() { return 2; }
+        foo(self) { // Second argument to rule is the super.foo(self) method, bound to this.
+          return super.__foo(self) * 10;
+        }
+        // No baz defined.
+      }
+      class SubSub extends Sub {
+        baz(self) { return super.__baz(self) * 2; }
+      }
+      Rule.rulify(Super.prototype);
+      Rule.rulify(Sub.prototype);
+      Rule.rulify(SubSub.prototype);
+      let sup = new Super();
+      let sub = new Sub();
+      let subsub = new SubSub();
+
+      expect(sup.root).toBe(3);
+      expect(sub.root).toBe(2);
+      expect(subsub.root).toBe(2);
+
+      expect(sup.baz).toBe(10);
+      expect(sub.baz).toBe(10);
+      expect(subsub.baz).toBe(20);
+
+      expect(sup.foo).toBe(3);
+      expect(sub.foo).toBe(20);
+      expect(subsub.foo).toBe(20);
+
+      expect(sup.bar).toBe(4);
+      expect(sub.bar).toBe(21);
+      expect(subsub.bar).toBe(21);
+    });
   });
-  describe('method', () => {
+  describe('method', function () {
     function calculator(self) { self.callCount++; return 1 + 2;}
     function calculatorOnProperty(self) { return self.ordinaryProperty + 2; }
     function calculatorOnRule(self) { return self.ordinaryProperty + self.calculator; }
@@ -110,16 +149,16 @@ describe('A Rule', () => {
           anInstance.calculatorOnRule = undefined
         });
         
-        it('does calculation', () => {
+        it('does calculation', function () {
           expect(anInstance.calculator).toBe(3);
         });
-        it('can reference ordinary properties on the instance to which it is attached', () => {
+        it('can reference ordinary properties on the instance to which it is attached', function () {
           expect(anInstance.calculatorOnProperty).toBe(4);
         });
-        it('can reference other rules', () => {
+        it('can reference other rules', function () {
           expect(anInstance.calculatorOnRule).toBe(5);
         });
-        it('is cached so that it is only computed once per instance', () => {
+        it('is cached so that it is only computed once per instance', function () {
           anInstance.callCount = 0;
           
           expect(anInstance.calculator).toBe(3);
@@ -132,18 +171,18 @@ describe('A Rule', () => {
           expect(anInstance.calculator).toBe(3);
           expect(anInstance.callCount).toBe(2);
         });
-        it('does not recognize changes to ordinary properties', () => {
+        it('does not recognize changes to ordinary properties', function () {
           expect(anInstance.calculatorOnProperty).toBe(4);
           anInstance.ordinaryProperty = 3;
           expect(anInstance.calculatorOnProperty).toBe(4); // not 5
         });
-        it('does recognize changes to other rules that it references', () => {
+        it('does recognize changes to other rules that it references', function () {
           expect(anInstance.calculator).toBe(3);
           expect(anInstance.calculatorOnRule).toBe(5);
           anInstance.calculator = 30;
           expect(anInstance.calculatorOnRule).toBe(32);
         });
-        it('stops recognizing changes to other rules that references if referencing rule is bypassed by setting a value directly', () => {
+        it('stops recognizing changes to other rules that references if referencing rule is bypassed by setting a value directly', function () {
           expect(anInstance.calculator).toBe(3);
           expect(anInstance.calculatorOnRule).toBe(5);
           anInstance.calculatorOnRule = 6;
@@ -153,12 +192,12 @@ describe('A Rule', () => {
           anInstance.calculatorOnRule = undefined; // reset the rule
           expect(anInstance.calculatorOnRule).toBe(32); // as above
         });
-        it('recognizes circularity', () => {
+        it('recognizes circularity', function () {
           expect(() => anInstance.aCircular).toThrowError();
           expect(() => anInstance.bCircular).toThrowError();
           expect(() => anInstance.cCircular).toThrowError();
         });
-        xit('configurable, enumerable, this vs self and binding of this', () => {
+        xit('configurable, enumerable, this vs self and binding of this', function () {
         });
       });
     }
@@ -168,7 +207,7 @@ describe('A Rule', () => {
     class Something {}
     testAnInstance(Something.prototype, new Something(), 'on a class instance');
   });
-  describe('tracking dependencies', () => {
+  describe('tracking dependencies', function () {
     function aPlus1(self) { return self.a + 1; }
     function bPlus1(self) { return self.b + 1; }
     function requiredPlus1(self) { return self.required + 1; }
@@ -176,7 +215,7 @@ describe('A Rule', () => {
     function dependant1Plus10(self) { return self.dependant1 + 10; }
     function dependant1Plus20(self) { return self.dependant1 + 20; }
     function testAnInstance(that) {
-      it('will recompute the last of a chain of three when the middle is reset, and then not again when the first is later reset', () => {
+      it('will recompute the last of a chain of three when the middle is reset, and then not again when the first is later reset', function () {
         that.a = 1;
         expect(that.c).toBe(3);
         that.b = 10;
@@ -185,7 +224,7 @@ describe('A Rule', () => {
         that.a = 20;
         expect(that.c).toBe(11);
       });
-      it('will fan out to all dependendents when changed', () => {
+      it('will fan out to all dependendents when changed', function () {
         expect(that.dependant2).toBe(7);
         expect(that.dependant1a).toBe(16);
         expect(that.dependant1b).toBe(26);
@@ -195,7 +234,9 @@ describe('A Rule', () => {
         expect(that.dependant2).toBe(5);
       });
     }
-    describe('on instance', () => {
+    xit('can be defined to eagerly re-evaluate', function () {
+    });
+    describe('on instance', function () {
       var that = {};
       Rule.attach(that, 'a');
       Rule.attach(that, 'b', aPlus1);
@@ -208,7 +249,7 @@ describe('A Rule', () => {
       Rule.attach(that, 'dependant1b', dependant1Plus20);
       testAnInstance(that);
     });
-    describe('on class instance', () => {
+    describe('on class instance', function () {
       class Something2 {}
       Rule.attach(Something2.prototype, 'a');
       Rule.attach(Something2.prototype, 'b', aPlus1);
@@ -222,7 +263,7 @@ describe('A Rule', () => {
       that.required = 5;
       testAnInstance(that);
     });
-    describe('overrides rules from later on inheritance chain', () => {
+    xdescribe('overrides rules from later on inheritance chain', function () {
       class OverrideExample {
         theRule() { return 'compiled in'; }
         dependant(self) { return 'got ' + self.theRule; }
@@ -237,14 +278,14 @@ describe('A Rule', () => {
         example = new OverrideExample();
         other = new Relabled();
       });
-      it('follows compiled-in rule', () => {
+      it('follows compiled-in rule', function () {
         expect(example.theRule).toBe('compiled in');
         expect(example.dependant).toBe('got compiled in');
         example.theRule = 'changed';
         expect(example.dependant).toBe('got changed');
         expect(other.dependant).toBe('got compiled override');
       });
-      it('follow attached override', () => {
+      it('follow attached override', function () {
         Rule.attach(example, 'theRule', () => other.dependant);
         expect(example.theRule).toBe('got compiled override');
         expect(example.dependant).toBe('got got compiled override');
@@ -321,45 +362,13 @@ describe('A Rule', () => {
       });
     });
   });
-  describe('execution time', () => {
-    var seed = 0, data;
-    function compute() { return Math.sqrt(Math.sqrt(Math.random())) + Math.sqrt(Math.sqrt(seed)); }
-    class Thrasher { }
-    Thrasher.prototype.computeMethod = compute;
-    Rule.attach(Thrasher.prototype, 'computeRule', compute);
-    function timeMethod(array) {
-      var i, size = array.length, start = Date.now(), instance;
-      for (i = 0; i < size; i++) {
-        seed = array[i].computeMethod();
-      }
-      return Date.now() - start;
-    }
-    function timeRule(array, label) {
-      var i, size = array.length, start = Date.now(), instance;
-      for (i = 0; i < size; i++) {
-        seed = array[i].computeRule;
-      }
-      var elapsed = Date.now() - start
-      if (label) console.log(`${label} averaged ${elapsed * 1000 / array.length} ms / rule.`);
-      return elapsed
-    }
-    beforeEach(() => {
-      data = Array(100000);
-      for (var i = 0; i < data.length; i++) { data[i] = new Thrasher(); }
-      var t = [new Thrasher()];
-      timeMethod(t);
-      timeRule(t);
+  describe('execution time', function () {
+    xit('should be within a small factor of normal method on first execution.', function () {
     });
-    it('is within an order of magnitude of a normal method for first execution', () => {
-      expect(timeRule(data, "First")).toBeLessThan(25 * timeMethod(data));
-    });
-    it('is within normal method for subsequent execution', () => {
-      timeMethod(data);
-      timeRule(data);
-      expect(timeRule(data, "Subsequent")).toBeLessThan(10 * timeMethod(data));
+    xit('should be less than a normal method on subsequent execution.', function () {
     });
   });
-  describe('with Promises', () => {
+  describe('with Promises', function () {
     var that = {};
     Rule.attach(that, 'explicitPromise', () => new Promise((resolve) => setTimeout(() => {
       resolve(3);
@@ -563,8 +572,8 @@ describe('A Rule', () => {
       });
     });
   });
-  describe('using this and self', () => {
-    it('has the same for both by default, with choice being a matter of style', () => {
+  describe('using this and self', function () {
+    it('has the same for both by default, with choice being a matter of style', function () {
       var that = {};
       Rule.attach(that, 'functionThis', function () {
         return this;
@@ -575,7 +584,7 @@ describe('A Rule', () => {
       expect(that.functionThis).toEqual(that);
       expect(that.functionSelf).toEqual(that);
     });
-    it('still has this not defined within arrow functions, as in all javascript', () => {
+    it('still has this not defined within arrow functions, as in all javascript', function () {
       var that = {};
       Rule.attach(that, 'arrowThis', () => {
         return this;
@@ -586,7 +595,7 @@ describe('A Rule', () => {
       expect(that.arrowThis).not.toEqual(that);
       expect(that.arrowSelf).toEqual(that);
     });
-    it('can be used in an entity/component system', () => {
+    it('can be used in an entity/component system', function () {
       var componentA = {property: 16};
       var componentB = {property: 41};
       function addProperties(self) { return this.property + self.property; }
@@ -607,7 +616,7 @@ describe('A Rule', () => {
       expect(entity.b.value).toEqual(42);
     });
   });
-  describe('only tracks Rules:', () => {
+  describe('only tracks Rules:', function () {
     it("does not track a ref'd var", () => {
       var a = 1, b = 2
       var pojo = {};
@@ -654,7 +663,7 @@ describe('A Rule', () => {
     });
     it("supports a recursive idiom", () => {
       var component = Rule.rulify({
-        list: [1, 2],
+        list: Rule.rulify([1, 2]),  // If you want the list (or an object) to be be rulified, you need to do it yourself.
         sum: self => self.list.reduce((a, e) => a + e),
         plus1: self => self.list.map(e => e + 1)
       });
@@ -672,7 +681,7 @@ describe('A Rule', () => {
       function ref(index) { counts[index]++; return component.list[index]; }
       var counts = [0, 0, 0],
           component = Rule.rulify({
-            list: ['a', 'b', 'c'],
+            list: Rule.rulify(['a', 'b', 'c']),
             ref0: () => ref(0),
             ref1: () => ref(1),
             ref2: () => ref(2)
@@ -692,13 +701,9 @@ describe('A Rule', () => {
       expect(counts[2]).toBe(2);            
     });
   });
-  // TODO: if input.a changes, b.value should not re-fire. (prove this by examining side effects)
-  // make a version of this that works the same way, but from a list [a, b],
-  // with another composite that references list[0].value and list[1].value.
-  // That should all work the same upon change.
-  // But if the list length changes, say, [a, b, c], then the composite sum should change.
-  // (Even as a list, though, changing a.input should not refire list[1].value.)
   describe('composite', function () {
+    xit('a rule can be dynamically added to an instance (e.g., for a named child or view)', function () {
+    });
     // The following illustrates the differences between different plausible ways of creating
     // a rule system with parent/child relationships.
     describe('with child construction that references parent values', function () {

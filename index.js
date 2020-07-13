@@ -1,7 +1,11 @@
 /*global exports*/
 "use strict";
 
-const util = require('util'); // For printing the error when there is a circular dependency.
+// TODO:
+// Split the simple parts out into a class Memoize, and Rule that inherits from it.
+// Create method that displays circularity, without making clients pull in the util package.
+
+const inspect = require('util').inspect; // For printing the error when there is a circular dependency.
 
 function simpleReset(instance, key) {
   instance[key] = undefined;
@@ -11,15 +15,15 @@ function eagerReset(instance, key) {
   process.nextTick(() => instance[key]);
 }
 
-function Rule(instance, key, init, onreset = simpleReset) { // instance must be the specific instance, not the __proto__.
+function Rule(instance, key, init, onreset = simpleReset, methodKey) { // instance must be the specific instance, not the __proto__.
   // usedBy and requires are other Rules.
   this.key = key; // FIXME for debugging
-  // TBD: Is this a memory leak when usedBy is the only reference to rules in objects thare no longer otherwise live?
+  this.cached = init; // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage.
+  // TBD: Under what circumstance is this is a memory leak, where usedBy is the only reference to rules in objects that are no longer otherwise live?
   // Outline of potential fix: a global weakmap from rule => array-of-usedby-rules, and insert a reference to that array in each
   // usedby rule. But then the array doesn't disappear until ALL the usedBy are gone. Hmm...?
   this.usedBy = [];
   this.requires = [];
-  this.cached = init;
   // Subtle: This will use the setter defined on instance when this Rule is attached to instance. The setter has side-effects.
   this.reset = function () { onreset(instance, key); };
 }
@@ -158,14 +162,16 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable, 
   // (To support entity/component architectures, if that specific instance defines a property called 'entity', it's value will
   // be used instead.)
   var ruleKey = '_' + key,
+      methodKey = '_' + ruleKey,
       isMethod = methodOrInit instanceof Function,
       method = isMethod ? methodOrInit : undefined,
       init = isMethod ? undefined : methodOrInit;
+  if (method) { objectOrProto[methodKey] = method; } // Just for accessing super.__whatever() in subclasses.
   function ensureRule(instance) {
     // The actual Rule object is added lazilly, only when the property is first accessed (by get or set).
     var rule = instance[ruleKey];
     if (!rule) {
-      rule = instance[ruleKey] = new Rule(instance, key, (init instanceof Object) ? Rule.rulify(init) : init, onreset);
+      rule = instance[ruleKey] = new Rule(instance, key, init, onreset, methodKey);
     }
     return rule;
   }
@@ -180,7 +186,7 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable, 
         if (method) {
           if (Rule.beingComputed.isCircularReference(rule)) {
             throw new Error("Circular Rule depends on itself: "
-                            + util.inspect({rule: rule, ruleStack: Rule.beingComputed}, {depth: 2}));
+                            + inspect({rule: rule, ruleStack: Rule.beingComputed}, {depth: 2}));
           }
           try {
             Rule.beingComputed.noteComputing(rule);
