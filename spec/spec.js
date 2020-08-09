@@ -197,7 +197,7 @@ describe('A Rule', function () {
           expect(() => anInstance.bCircular).toThrowError();
           expect(() => anInstance.cCircular).toThrowError();
         });
-        xit('configurable, enumerable, this vs self and binding of this', function () {
+        xit('configurable, enumerable', function () {
         });
       });
     }
@@ -263,7 +263,7 @@ describe('A Rule', function () {
       that.required = 5;
       testAnInstance(that);
     });
-    xdescribe('overrides rules from later on inheritance chain', function () {
+    describe('overrides rules from later on inheritance chain', function () {
       class OverrideExample {
         theRule() { return 'compiled in'; }
         dependant(self) { return 'got ' + self.theRule; }
@@ -595,7 +595,7 @@ describe('A Rule', function () {
       expect(that.arrowThis).not.toEqual(that);
       expect(that.arrowSelf).toEqual(that);
     });
-    it('can be used in an entity/component system', function () {
+    xit('can be used in an entity/component system', function () {
       var componentA = {property: 16};
       var componentB = {property: 41};
       function addProperties(self) { return this.property + self.property; }
@@ -654,12 +654,25 @@ describe('A Rule', function () {
           list = Rule.rulify(nakedList),
           other = {};
       Rule.attach(other, 'sum', () => list.reduce((a, e) => a + e));
-      expect(other.sum).toEqual(3);
-      list[0] = 2;
-      expect(other.sum).toEqual(4);
-      list.push(3);
-      // Recomputes because we track length as if it were a rule!
-      expect(other.sum).toEqual(7);
+      expect(other.sum).toBe(3);
+
+      list[0] = 2; // change of list resets sum
+      expect(other.sum).toBe(4);
+
+      list.push(3); // change of list resets sum
+      expect(other.sum).toBe(7);
+
+      nakedList.push(1); // change of the original list does not reset sum
+      expect(other.sum).toBe(7); // not 8, because 7 is still cached
+
+      list.push(2); // change of list resets sum, which picks up change to original list
+      expect(other.sum).toBe(10);
+
+      list.pop();
+      expect(other.sum).toBe(8);
+
+      list.splice(1, 1);
+      expect(other.sum).toBe(6);
     });
     it("supports a recursive idiom", () => {
       var component = Rule.rulify({
@@ -716,23 +729,23 @@ describe('A Rule', function () {
           this.input1 = value1;
           this.input2 = value2;
         }
-        computationOnValue1(self) {
-          computations.push(`simple compute ${self.name}`);
-          return self.input1 * 2;
+        computationOnValue1() {
+          computations.push(`simple compute ${this.name}`);
+          return this.input1 * 2;
         }
-        expensiveComputationOnValue2(self) {
-          computations.push(`expensive compute ${self.name}`);
-          return Math.sqrt(self.input2);
+        expensiveComputationOnValue2() {
+          computations.push(`expensive compute ${this.name}`);
+          return Math.sqrt(this.input2);
         }
-        total(self) { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
+        total() { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
       }
       class Parent {
         parameterA() { return 1; }
         parameterB() { return 2; }
         parameterC() { return 9; }
-        a(self) { return new Child('a', self.parameterA, self.parameterC); }
-        b(self) { return new Child('b', self.parameterB, self.parameterC); }
-        sum(self) { return self.a.total + self.b.total; }
+        a() { return new Child('a', this.parameterA, this.parameterC); }
+        b() { return new Child('b', this.parameterB, this.parameterC); }
+        sum() { return this.a.total + this.b.total; }
       }
       Rule.rulify(Child.prototype);
       Rule.rulify(Parent.prototype);
@@ -766,23 +779,23 @@ expensive compute a`);
           this.name1 = name1;
           this.name2 = name2;
         }
-        computationOnValue1(self) {
-          computations.push(`simple compute ${self.name}`);
-          return self.parent[this.name1] * 2;
+        computationOnValue1() {
+          computations.push(`simple compute ${this.name}`);
+          return this.parent[this.name1] * 2;
         }
-        expensiveComputationOnValue2(self) {
-          computations.push(`expensive compute ${self.name}`);
-          return Math.sqrt(self.parent[this.name2]);
+        expensiveComputationOnValue2() {
+          computations.push(`expensive compute ${this.name}`);
+          return Math.sqrt(this.parent[this.name2]);
         }
-        total(self) { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
+        total() { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
       }
       class Parent {
         parameterA() { return 1; }
         parameterB() { return 2; }
         parameterC() { return 9; }
-        a(self) { return new Child('a', self, 'parameterA', 'parameterC'); }
-        b(self) { return new Child('b', self, 'parameterB', 'parameterC'); }
-        sum(self) { return self.a.total + self.b.total; }
+        a() { return new Child('a', this, 'parameterA', 'parameterC'); }
+        b() { return new Child('b', this, 'parameterB', 'parameterC'); }
+        sum() { return this.a.total + this.b.total; }
       }
       Rule.rulify(Child.prototype);
       Rule.rulify(Parent.prototype);

@@ -56,6 +56,7 @@ var XPromise = Promise || function XPromise() {}; // No Promises on IE.
 Rule.prototype.requiresPromise = function requiresPromise(instance, key, ourPromise, requiredRule) {
   var that = this;
   if (!ourPromise) { // Ensure a promise that will only resolve when all we require is resolved.
+    if (Rule.debug) console.log('creating new promise for', instance.foo, key);
     ourPromise = new XPromise(function (resolve, reject) {
       that.resolve = resolve;
       that.reject = reject;
@@ -66,13 +67,17 @@ Rule.prototype.requiresPromise = function requiresPromise(instance, key, ourProm
     try { // try our rule again.
       val = instance[key]; // will still be our promise if still waiting.
     } catch (e) {
+      if (Rule.debug) console.log(instance.foo, key, 'caught', e.constructor.name, 'and deleting resolve');
       delete that.resolve;
-      that.reject(e);
+      return that.reject(e);
     }
-    if (val === ourPromise) return; // Don't loop if still waiting
+    if (Rule.debug) console.log(instance.foo, key, 'has computed, resolve:', !!resolve, '(val === ourPromise):', (val === ourPromise));
+    if (!resolve || (val === ourPromise)) return; // Don't loop if still waiting
+    if (Rule.debug) console.log(instance.foo, key, 'has evaluated and deleting resolve');    
     delete that.resolve;
     resolve(val);
   }, function (reason) {
+    if (Rule.debug) console.log(instance.foo, key, 'has rejected', reason.constructor.name, 'and deleting resolve');
     delete that.resolve;
     that.reject(reason);
   });
@@ -80,13 +85,27 @@ Rule.prototype.requiresPromise = function requiresPromise(instance, key, ourProm
 }
 Rule.prototype.ensurePromiseResolution = function ensurePromiseResolution(promise, key) {
   var that = this;
-  if (!(promise instanceof XPromise)) return;
+  if (!(promise instanceof XPromise)) return; // check for thenable instead?
+  if (Rule.debug) console.log('ensurePromiseResolution', key, 'hasFollowup:', !!this.hasFollowup);
   if (this.hasFollowup) return;
   // Might be a Promise we we created above, or explicitly created by the method body.
   this.hasFollowup = true;
   promise.then(function (result) { // When our freshly created Promise resolves...
+    if (Rule.debug) console.log('ensurePromiseResolution', key, 'followup on resolution');
     delete that.hasFollowup;
-    if (that.cached !== promise) return; // In case it has since been reset.
+    /************
+    // TODO: do we want some sort of sanity check like this?
+    // The idea is for the situation where:
+    //   Someone demands a rule, and produces a promise.
+    //   Someone resets the rule. (Might even happen as a result of the computation.)
+    //   the computation resolves and this 'then' runs to set the value, that we don't actually want any more.
+    // But I haven't found a good way to do that properly.
+    // Probably best to start with some specific unit tests.
+    if ((that.cached !== promise) && (that.cached !== result)) { // In case it has since been reset.
+      console.debug('Completing promise', promise, 'with', result, 'that should now be', that.cached); // It would be nice to let them know.
+      //return; // Don't cache. But I get infinite loops with this in some cases.
+    }
+    *************/
     that.cached = result; // ... replace the Promise with the result, leaving usedBy/requires alone.
   }, function () { // Keep rejection in the promise chain, rather than throwing asynchronously
   });
@@ -190,8 +209,7 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable, 
           }
           try {
             Rule.beingComputed.noteComputing(rule);
-            // this.entity is a hook for components. If this defines an entity property, use it.
-            cached = method.call(this, this.entity || this);
+            cached = method.call(this, this);
           } catch (e) {
             if (!(e instanceof Rule)) {
               throw e; // Not a Promise rule, so re-signal the error.
@@ -209,7 +227,7 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable, 
         }
       }
       rule.ensurePromiseResolution(cached, key);
-      if (Rule.beingComputed.trackRule(rule) && (rule.cached instanceof XPromise)) {
+      if (Rule.beingComputed.trackRule(rule) && (rule.cached instanceof XPromise)) { // check for thenable instead?
         throw rule; // So that the computing rule that uses us can track this Promise, in its catch like above.
       }
       return cached;
@@ -227,7 +245,7 @@ Rule.attach = function attach(objectOrProto, key, methodOrInit, isRedefineable, 
 Rule.rulify = function rulify(object, optionalPropertiesToRulify, eagerRules = []) {
   if (Array.isArray(object)) { // We treat lists differently. See README.md.
     return proxyRules(object,
-                      new Array(object.length),
+                      {}, // fixme new Array(object.length),
                       function rulifiablePropertyName(key) { // We don't want to rulify array methods
                         if (key === 'length') return 'trackedLength'; // Not length!
                         if (/^[0-9]+$/.test(key.toString())) return key.toString(); // integer keys are good
