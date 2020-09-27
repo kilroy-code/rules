@@ -197,8 +197,6 @@ describe('A Rule', function () {
           expect(() => anInstance.bCircular).toThrowError();
           expect(() => anInstance.cCircular).toThrowError();
         });
-        xit('configurable, enumerable', function () {
-        });
       });
     }
     var anInstance = {};
@@ -234,7 +232,26 @@ describe('A Rule', function () {
         expect(that.dependant2).toBe(5);
       });
     }
-    xit('can be defined to eagerly re-evaluate', function () {
+    it('can be defined to eagerly re-evaluate', function (done) {
+      class Eager {
+        static count = 0;
+        referenced() { return 1; }
+        eager() {
+          this.constructor.count++;
+          return this.referenced;
+        }
+      }
+      Rule.rulify(Eager.prototype, undefined, ['eager']);
+      let eager = new Eager;
+      expect(Eager.count).toBe(0); // eager has not been referenced yet.
+      expect(eager.eager).toBe(1);
+      expect(Eager.count).toBe(1);
+      eager.referenced = 2;
+      process.nextTick(() => { // It doesn't re-evaluate right away, but after a tick.
+        expect(Eager.count).toBe(2); // without referencing eager again.
+        expect(eager.eager).toBe(2);
+        done();
+      });
     });
     describe('on instance', function () {
       var that = {};
@@ -303,60 +320,96 @@ describe('A Rule', function () {
         expect(example.dependant).toBe('got got upstream changed'); // now it does
       });
     });
-    it('does not track dependencies in callbacks', (done) => {
-      function fetchFromDatabase(key, cb) {
-        setTimeout(() => cb(null, key + 2), 10);
-      }
-      class Callbacks {
-        a() { return 1; }
-        b() { return 2; }
-        noPromise(self) {
-          var a = self.a;
-          var container = [];
-          fetchFromDatabase(a, function (error, dbValue) {
-            if (error) throw error;
-            container[0] = dbValue + a + self.b;
-          });
-          return container;
+    describe('with asynchronicity', function () {
+      it('of parallel promises', async function (done) {
+        class All {
+          aVal() { return 'a'; }
+          bVal() { return 'b'; }
+          cVal() { return 'c'; }
+          a() { return Promise.resolve(this.aVal); }
+          b() { return Promise.resolve(this.bVal); }
+          c() { return this.cVal; }
+          refA() { return this.a; }
+          refB() { return this.b; }
+          refC() { return this.c; }
+          //all() { return [this.refA, this.refB, this.refC]; }
+          // FIXME: The above works fine, and it is completely unnecessary to use Promise.all
+          // as in the following line. But IWBNI it worked anyway. It doesn't, because
+          // although we attach a 'then' to something this a promise, we don't attach one
+          // that becomes a promise on retry. (It's difficult because we want to maintain
+          // the same promise throughout, and yet we have to attach one 'then' to the original
+          // and one to the Promise.all.)
+          all() { return Promise.all([this.refA, this.refB, this.refC]); }
+          ref() { return this.all; }
         }
-        wrongResult(self) { return self.noPromise[0]; }
-        promiseButStillWrong(self) {
-          var a = self.a;
-          return new Promise(function (resolve, reject) {
+        Rule.rulify(All.prototype);
+        let all = new All(),
+            referenced = await all.ref;
+        expect(referenced).toEqual(['a', 'b', 'c']);
+        all.aVal = "a'";
+        all.bVal = "b'";
+        all.cVal = "c'";
+        referenced = await all.ref;
+        expect(referenced).toEqual(["a'", "b'", "c'"]);
+        done();
+      });
+      it('does not track dependencies in callbacks', (done) => {
+        function fetchFromDatabase(key, cb) {
+          setTimeout(() => cb(null, key + 2), 10);
+        }
+        class Callbacks {
+          a() { return 1; }
+          b() { return 2; }
+          noPromise(self) {
+            var a = self.a;
+            var container = [];
             fetchFromDatabase(a, function (error, dbValue) {
-              if (error) reject(error);
-              resolve(dbValue + a + self.b);
+              if (error) throw error;
+              container[0] = dbValue + a + self.b;
             });
-          });
-        }
-        onlyTracksSome(self) { return self.promiseButStillWrong; }
-        dbValue(self) {
-          return new Promise(function (resolve, reject) {
-            fetchFromDatabase(self.a, function (error, dbValue) {
-              if (error) reject(error);
-              resolve(dbValue);
+            return container;
+          }
+          wrongResult(self) {
+            return self.noPromise[0] || 'none';
+          }
+          promiseButStillWrong(self) {
+            var a = self.a;
+            return new Promise(function (resolve, reject) {
+              fetchFromDatabase(a, function (error, dbValue) {
+                if (error) reject(error);
+                resolve(dbValue + a + self.b);
+              });
             });
-          });
+          }
+          onlyTracksSome(self) { return self.promiseButStillWrong; }
+          dbValue(self) {
+            return new Promise(function (resolve, reject) {
+              fetchFromDatabase(self.a, function (error, dbValue) {
+                if (error) reject(error);
+                resolve(dbValue);
+              });
+            });
+          }
+          computationOnDbValue(self) {
+            return self.dbValue + self.a + self.b;
+          }
         }
-        computationOnDbValue(self) {
-          return self.dbValue + self.a + self.b;
-        }
-      }
-      Rule.rulify(Callbacks.prototype);
-      var that = new Callbacks();
-      expect(() => that.wrongResult).toThrowError();
-      Promise.all([that.onlyTracksSome, that.computationOnDbValue]).then(() => {
-        expect(that.onlyTracksSome).toBe(6);
-        expect(that.computationOnDbValue).toBe(6);
-        that.a = 0;
+        Rule.rulify(Callbacks.prototype);
+        var that = new Callbacks();
+        expect(that.wrongResult).toBe('none');
         Promise.all([that.onlyTracksSome, that.computationOnDbValue]).then(() => {
-          expect(that.onlyTracksSome).toBe(4);
-          expect(that.computationOnDbValue).toBe(4);
-          that.b = 0;
+          expect(that.onlyTracksSome).toBe(6);
+          expect(that.computationOnDbValue).toBe(6);
+          that.a = 0;
           Promise.all([that.onlyTracksSome, that.computationOnDbValue]).then(() => {
-            expect(that.onlyTracksSome).toBe(4); // Wrong answer!
-            expect(that.computationOnDbValue).toBe(2);
-            done();
+            expect(that.onlyTracksSome).toBe(4);
+            expect(that.computationOnDbValue).toBe(4);
+            that.b = 0;
+            Promise.all([that.onlyTracksSome, that.computationOnDbValue]).then(() => {
+              expect(that.onlyTracksSome).toBe(4); // Wrong answer!
+              expect(that.computationOnDbValue).toBe(2);
+              done();
+            });
           });
         });
       });
@@ -370,33 +423,34 @@ describe('A Rule', function () {
   });
   describe('with Promises', function () {
     var that = {};
-    Rule.attach(that, 'explicitPromise', () => new Promise((resolve) => setTimeout(() => {
-      resolve(3);
-    }, 0)));
-    it('resolves to the actual value when the promise resolves', (done) => {
+    it('resolves to the actual value when the promise resolves.', (done) => {
+      Rule.attach(that, 'explicitPromise', () => new Promise(resolve => setTimeout(() => resolve(3), 0)));
       that.explicitPromise.then(() => {
         expect(that.explicitPromise).toBe(3);
         done();
       });
     });
-    it('is still initially a promise that then becomes the value, if the rule is an immediately resolve promise', (done) => {
+    it('is still initially a promise that then becomes the value, if the rule is an immediately resolved promise.', (done) => {
       Rule.attach(that, 'immediatePromise', () => Promise.resolve(3));
       that.immediatePromise.then(() => {
         expect(that.immediatePromise).toBe(3);
         done();
       });
     });
-    it('is contagious to other rules that reference it', (done) => {
+    it('is contagious to other rules that reference it.', (done) => {
       Rule.attach(that, 'promisedA', () => Promise.resolve(3));
       Rule.attach(that, 'referenceA', (self) => self.promisedA + 1);
       that.referenceA.then((resolved) => {
         expect(resolved).toBe(4);
         expect(that.referenceA).toBe(4);
-        expect(that.referenceA).toBe(4);                
+        expect(that.referenceA).toBe(4);
+        expect(that.referenceA.then).toBeUndefined();
+
         that.promisedA = 72;
         expect(that.referenceA).toBe(73);
+        expect(that.referenceA).toBe(73);
         expect(that.referenceA.then).toBeUndefined();
-        expect(that.referenceA).toBe(73);                
+
         that.promisedA = undefined;
         that.referenceA.then((resolved) => {
           expect(resolved).toBe(4);
@@ -406,7 +460,7 @@ describe('A Rule', function () {
         });
       });
     });
-    it('propogates resolutions through chains', (done) => {
+    it('propogates resolutions through chains.', (done) => {
       Rule.attach(that, 'chainA', () => Promise.resolve(3));
       Rule.attach(that, 'chainB', (self) => self.chainA + 1);
       Rule.attach(that, 'chainC', (self) => self.chainB + 1);            
@@ -416,39 +470,17 @@ describe('A Rule', function () {
         done();
       });
     });                  
-    it('propogates rejections through contagious chains', (done) => {
+    it('propogates rejections through contagious chains (rather than unchained/unhandled).', (done) => {
       var that = {};
       Rule.attach(that, 'chainA', () => Promise.reject(3));
       Rule.attach(that, 'chainB', (self) => self.chainA + 1);
-      Rule.attach(that, 'chainC', (self) => self.chainB + 1);            
+      Rule.attach(that, 'chainC', (self) => self.chainB + 1);
       that.chainC.catch((reason) => {
         expect(reason).toBe(3);
         done();
       });
     });
-    it('can handle multiple promise references in a rule', function (done) {
-      var that = {};
-      Rule.attach(that, 'a', () => Promise.resolve(1));
-      Rule.attach(that, 'b', self =>
-                  new Promise(resolve => setTimeout(() => resolve(self.a + 1), 100)));
-      Rule.attach(that, 'c', self =>
-                  new Promise(resolve => setTimeout(() => resolve(self.a + 2), 100)));
-      Rule.attach(that, 'd', () => Promise.resolve(0));            
-      Rule.attach(that, 'e');
-      that.e = Promise.resolve(0); // even explicitly set, not from method
-      Rule.attach(that, 'f', self => self.a + self.b + self.c + self.d + self.e);
-      that.f.then((f) => {
-        expect(that.a).toBe(1);
-        expect(that.b).toBe(2);
-        expect(that.c).toBe(3);
-        expect(that.d).toBe(0);
-        expect(that.e).toBe(0);                
-        expect(that.f).toBe(6);
-        expect(f).toBe(6);                
-        done();
-      });
-    });
-    it('properly caches rules that were resolved promises', done => {
+    it('properly caches rules that were resolved promises.', done => {
       var count = 0,
           data = Rule.rulify({
             delayed: () => Promise.resolve(17),
@@ -461,7 +493,7 @@ describe('A Rule', function () {
         done();
       });
     });
-    it('can refer to promise rule chains', done => {
+    it('can refer to promise rule chains.', done => {
       var data = Rule.rulify({
         a: () => Promise.resolve(1),
         b: self => Promise.resolve(self.a),
@@ -473,7 +505,56 @@ describe('A Rule', function () {
         done();
       });
     });
-    it('when chained to other rulified objects with promises will resolve in a rule', done => {
+    describe('can handle multiple promise references', function () {
+      it('in a rule.', function (done) {
+        var that = {};
+        Rule.attach(that, 'a', () => Promise.resolve(1));
+        Rule.attach(that, 'b', self =>
+                    new Promise(resolve => setTimeout(() => resolve(self.a + 1), 100)));
+        Rule.attach(that, 'c', self =>
+                    new Promise(resolve => setTimeout(() => resolve(self.a + 2), 100)));
+        Rule.attach(that, 'd', () => Promise.resolve(0));            
+        Rule.attach(that, 'e');
+        that.e = Promise.resolve(0); // even explicitly set, not from method
+        Rule.attach(that, 'f', self => self.a + self.b + self.c + self.d + self.e);
+        that.f.then((f) => {
+          expect(that.a).toBe(1);
+          expect(that.b).toBe(2);
+          expect(that.c).toBe(3);
+          expect(that.d).toBe(0);
+          expect(that.e).toBe(0);                
+          expect(that.f).toBe(6);
+          expect(f).toBe(6);                
+          done();
+        });
+      });
+      it('in a referenced rule.', function (done) {
+        // Same as above, but with f referenced by another.
+        var that = {};
+        Rule.attach(that, 'a', () => Promise.resolve(1));
+        Rule.attach(that, 'b', self =>
+                    new Promise(resolve => setTimeout(() => resolve(self.a + 1), 100)));
+        Rule.attach(that, 'c', self =>
+                    new Promise(resolve => setTimeout(() => resolve(self.a + 2), 100)));
+        Rule.attach(that, 'd', () => Promise.resolve(0));            
+        Rule.attach(that, 'e');
+        that.e = Promise.resolve(0); // even explicitly set, not from method
+        Rule.attach(that, 'f', self => self.a + self.b + self.c + self.d + self.e);
+        Rule.attach(that, 'g', self => self.f);
+        that.g.then((g) => {
+          expect(that.a).toBe(1);
+          expect(that.b).toBe(2);
+          expect(that.c).toBe(3);
+          expect(that.d).toBe(0);
+          expect(that.e).toBe(0);                
+          expect(that.f).toBe(6);
+          expect(that.g).toBe(6);
+          expect(g).toBe(6);        
+          done();
+        });
+      });
+    });
+    it('when chained to other rulified objects with promises will resolve in a rule.', done => {
       var data = Rule.rulify({
         a: () => Promise.resolve(Rule.rulify({
           b: () => Promise.resolve(Rule.rulify({
@@ -487,7 +568,7 @@ describe('A Rule', function () {
         done();
       });
     });
-    it('when chained to other rulified objects with promises will not resolve outside a rule', done => {
+    it('when chained to other rulified objects with promises will not resolve outside a rule.', done => {
       var data = Rule.rulify({
         a: () => Promise.resolve(Rule.rulify({
           b: () => Promise.resolve(Rule.rulify({
@@ -498,76 +579,131 @@ describe('A Rule', function () {
       expect(() => data.a.b.c.then(() => "won't get here")).toThrowError();
       done();
     });
-    it('does not attempt to treat promises as values within rules', done => {
-      var history = [],
-          data = Rule.rulify({
-            a: self => {
-              history.push('start a');
-              return new Promise(resolve => {
-                setTimeout(() => {
-                  history.push('finish a');
-                  resolve(1);
-                }, 100);
+    describe('does not attempt to treat promises as values within rules', function () {
+      function define(label, reference) {
+        it(label, async () => {
+          function recordedDelayedComputation(label, thunk) {
+            history.push('start ' + label);
+            return new Promise(resolve => {
+              setTimeout(() => {
+                history.push('finish ' + label);
+                resolve(thunk());
+              }, 100);
+            });
+          }
+          function recordedDelayedValue(label, value) {
+            return recordedDelayedComputation(label, () => value);
+          }
+          var history = [],
+              data = Rule.rulify({
+                a: self => recordedDelayedValue('a', Rule.rulify([1])),
+                b: self => recordedDelayedValue('b', {c: 2}),
+                d: self => recordedDelayedComputation('d', () => Rule.rulify({e: self => recordedDelayedValue('e', {f: 3})})),
+                z: self => {
+                  history.push('start z');
+                  let referenceThroughLength = self.a.length - self.a.length;
+                  const result = self.a[referenceThroughLength] + self.b.c + self.d.e.f;
+                  history.push('finish z');
+                  return result;
+                },
+                reference: self => self.z,
+                refA: self => self.a.map(e => e)
               });
-            },
-            b: self => {
-              history.push('start b');
-              return new Promise(resolve => {
-                setTimeout(() => {
-                  history.push('finish b');
-                  resolve({c: 2});
-                }, 100);
-              });
-            },
-            d: self => {
-              history.push('start d');
-              return new Promise(resolve => {
-                setTimeout(() => {
-                  history.push('finish d');
-                  resolve(Rule.rulify({
-                    e: self => {
-                      history.push('start e');
-                      return new Promise(resolve => {
-                        setTimeout(() => {
-                          history.push('finish 3');
-                          resolve({f: 3});
-                        }, 100)
-                      });
-                    }
-                  }));
-                });
-              });
-            },
-            z: self => {
-              history.push('start z');
-              const result = self.a + self.b.c + self.d.e.f;
-              history.push('finish z');
-              return result;
-            }
-          });
-      data.z.then(final => {
-        expect(history).toEqual([
-          'start z',
-          'start a',
-          'finish a',
-          
-          'start z',
-          'start b',
-          'finish b'
-          ,
-          'start z',
-          'start d',
-          'finish d',
-          
-          'start z',
-          'start e',
-          'finish 3',
-          
-          'start z',
-          'finish z'
-        ]);
-        expect(final).toBe(data.z);
-        expect(final).toBe(6);
+          function check(final, aPart = []) {
+            expect(final).toBe(data.z);
+            expect(final).toBe(6);
+            expect(history).toEqual(aPart.concat([              
+              'start z',
+              'start b',
+              'finish b',
+              
+              'start z',
+              'start d',
+              'finish d',
+              
+              'start z',
+              'start e',
+              'finish e',
+              
+              'start z',
+              'finish z'
+            ]));
+          }
+          await data[reference].then(final => check(final, [
+            'start z',
+            'start a',
+            'finish a'
+          ]));
+          history = [];
+          expect(data.refA).toEqual([1]);
+          data.a.push(2);
+          data.b = data.d = undefined;
+          await data[reference].then(check);          
+          expect(data.refA).toEqual([1, 2]);
+        });
+      }
+      define('directly', 'z');
+      define('indirectly', 'reference');
+    });
+    describe('can', function () {
+      it('have an initial Promise value that resolves.', async function (done) {
+        let object = Rule.attach({}, 'rule', Promise.resolve(17)),
+            result = await object.rule;
+        expect(result).toBe(17);
+        expect(object.rule).toBe(result);
+        done();
+      });
+      it('compute an initial Promise value that resolves.', async function (done) {
+        class Klass {
+          rule() { return Promise.resolve(17); }
+        }
+        Rule.rulify(Klass.prototype);
+        let object = new Klass(),
+            result = await object.rule;
+        expect(result).toBe(17);
+        expect(object.rule).toBe(result);
+        done();
+      });
+      it('reference a promise that resolves.', async function (done) {
+        class Klass {
+          promise() { return Promise.resolve(17); }
+          rule() { return this.promise; }
+        }
+        Rule.rulify(Klass.prototype);
+        let object = new Klass(),
+            result = await object.rule;
+        expect(result).toBe(17);
+        expect(object.rule).toBe(result);
+        done();
+      });
+      it('reference a promise that resolves to produce a promise that resolves.', async function (done) {
+        class Klass {
+          promise() { return Promise.resolve(17); }
+          rule() { return Promise.resolve(this.promise); }
+        }
+        Rule.rulify(Klass.prototype);
+        let object = new Klass(),
+            result = await object.rule;
+        expect(result).toBe(17);
+        expect(object.rule).toBe(result);
+        done();
+      });
+      it('reference an array of promises to be resolved.', async function (done) {
+        class Klass {
+          anotherPromise() { return Promise.resolve(2); }
+          promise() { return [1, this.anotherPromise, Promise.resolve(17)]; }
+          rule() { return Promise.all(this.promise); }
+          ref() { return this.rule; }
+        }
+        Rule.rulify(Klass.prototype);
+        let object = new Klass(),
+            result = await object.rule;
+        expect(result).toEqual([1, 2, 17]);
+        expect(object.rule).toBe(result);
+        expect(object.ref).toBe(result);
+        object.anotherPromise = Promise.resolve(3);
+        let next = await object.ref;
+        expect(next).toEqual([1, 3, 17]);
         done();
       });
     });
@@ -594,26 +730,6 @@ describe('A Rule', function () {
       });
       expect(that.arrowThis).not.toEqual(that);
       expect(that.arrowSelf).toEqual(that);
-    });
-    xit('can be used in an entity/component system', function () {
-      var componentA = {property: 16};
-      var componentB = {property: 41};
-      function addProperties(self) { return this.property + self.property; }
-      Rule.attach(componentA, 'value', addProperties);
-      Rule.attach(componentB, 'value', addProperties);            
-      var entity = {
-        property: 1,
-        addComponent: function (name, component) {
-          // Rules will use this.entity (if defined) as the 'self' parameter.
-          component.entity = this;
-          this[name] = component;
-        }
-      };
-      entity.addComponent('a', componentA);
-      entity.addComponent('b', componentB);
-      
-      expect(entity.a.value).toEqual(17);
-      expect(entity.b.value).toEqual(42);
     });
   });
   describe('only tracks Rules:', function () {
@@ -715,7 +831,15 @@ describe('A Rule', function () {
     });
   });
   describe('composite', function () {
-    xit('a rule can be dynamically added to an instance (e.g., for a named child or view)', function () {
+    it('a rule can be dynamically added to an instance (e.g., for a named child or view)', function () {
+      class Composite {
+        a() { return 'a'; }
+        refB(self) { return this.b; }
+      }
+      Rule.rulify(Composite.prototype);
+      let composite = new Composite();
+      Rule.attach(composite, 'b', function () { return this.a; }); // Naturally, we can't use a fat arrow and reference 'this'.
+      expect(composite.refB).toBe('a');
     });
     // The following illustrates the differences between different plausible ways of creating
     // a rule system with parent/child relationships.
