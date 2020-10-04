@@ -333,12 +333,8 @@ describe('A Rule', function () {
           refB() { return this.b; }
           refC() { return this.c; }
           //all() { return [this.refA, this.refB, this.refC]; }
-          // FIXME: The above works fine, and it is completely unnecessary to use Promise.all
-          // as in the following line. But IWBNI it worked anyway. It doesn't, because
-          // although we attach a 'then' to something this a promise, we don't attach one
-          // that becomes a promise on retry. (It's difficult because we want to maintain
-          // the same promise throughout, and yet we have to attach one 'then' to the original
-          // and one to the Promise.all.)
+          // The above works fine, and it is completely unnecessary to use Promise.all
+          // as in the following line. But IWBNI it worked anyway. 
           all() { return Promise.all([this.refA, this.refB, this.refC]); }
           ref() { return this.all; }
         }
@@ -424,9 +420,16 @@ describe('A Rule', function () {
   describe('with Promises', function () {
     var that = {};
     it('resolves to the actual value when the promise resolves.', (done) => {
-      Rule.attach(that, 'explicitPromise', () => new Promise(resolve => setTimeout(() => resolve(3), 0)));
+      Rule.attach(that, 'explicitPromise', () => Promise.resolve(3));
       that.explicitPromise.then(() => {
         expect(that.explicitPromise).toBe(3);
+        done();
+      });
+    });
+    it('resolves to the actual value when the delayed promise resolves.', (done) => {
+      Rule.attach(that, 'explicitDelayedPromise', () => new Promise(resolve => setTimeout(() => resolve(3), 0)));
+      that.explicitDelayedPromise.then(() => {
+        expect(that.explicitDelayedPromise).toBe(3);
         done();
       });
     });
@@ -558,7 +561,7 @@ describe('A Rule', function () {
       var data = Rule.rulify({
         a: () => Promise.resolve(Rule.rulify({
           b: () => Promise.resolve(Rule.rulify({
-            c: Promise.resolve(17)
+            c: () => Promise.resolve(17)
           }))
         })),
         chainRule: self => self.a.b.c
@@ -572,7 +575,7 @@ describe('A Rule', function () {
       var data = Rule.rulify({
         a: () => Promise.resolve(Rule.rulify({
           b: () => Promise.resolve(Rule.rulify({
-            c: Promise.resolve(17)
+            c: () => Promise.resolve(17)
           }))
         }))
       });
@@ -646,11 +649,11 @@ describe('A Rule', function () {
       define('indirectly', 'reference');
     });
     describe('can', function () {
-      it('have an initial Promise value that resolves.', async function (done) {
+      it('no have an initial Promise value (without compute) that resolves.', async function (done) {
         let object = Rule.attach({}, 'rule', Promise.resolve(17)),
             result = await object.rule;
-        expect(result).toBe(17);
-        expect(object.rule).toBe(result);
+        expect(result).toBe(17); // That's fine.
+        expect(object.rule instanceof Promise).toBeTruthy(); // No compute method, so it doesn't get replaced.
         done();
       });
       it('compute an initial Promise value that resolves.', async function (done) {

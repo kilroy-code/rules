@@ -20,11 +20,12 @@ class TrackingRule {
   toString() {
     return `[${this.constructor.name} ${this.instanceToString()} ${this.key}]`;
   }
-  instanceToString() { // Seems unnecessary, until you wonder why a rule attached to the array [x] prints as [ProxyRule x 'foo']!
+  instanceToString() { // Seems unnecessary, until you wonder why a rule attached to the array [x] prints
+    // as [ProxyRule x foo] instead of [ProxyRule [x] foo]!
     if (Array.isArray(this.instance)) {
-      return `[${this.instance}]`;
+      return `[${this.toString()}]`;
     }
-    return this.instance.toString(); 
+    return this.instance.toString();
   }
 
   addReference(reference) { // Used by RuleStack
@@ -49,7 +50,7 @@ class TrackingRule {
   }
 
   retrieveOrComputeValue(...args) {
-    return this.retrieveValue(...args); // Must be defined by subclasses.
+    return this.retrieveValue(...args);
   }
   get(...args) {
     let value = this.retrieveOrComputeValue(...args);
@@ -57,10 +58,16 @@ class TrackingRule {
     return value;
   }
   set(...args) {
-    this.storeValue(...args); // Must be defined by subclasses.
+    this.storeValue(...args);
     return this.resetReferences();
   }
   reset() { this.set(this.instance, this.key, undefined); }
+
+  // Must be defined by subclasses, and must not add or remove references.
+  retrieveValue(target, property, receiver=target) {
+  }
+  storeValue(target, property, value, receiver=target) {
+  }
 }
 
 module.exports = TrackingRule;

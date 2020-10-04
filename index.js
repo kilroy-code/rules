@@ -33,10 +33,12 @@ class PropertyRule extends ComputedRule {
     super(instance, key, methodKey);
     this.cached = init; // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage.
   }
-  retrieveValue(target, property) {
+  retrieveValue(target, property, receiver = target) {
+    super.retrieveValue(target, property, receiver);
     return this.cached;
   }
-  storeValue(target, property, value) {
+  storeValue(target, property, value, receiver = target) {
+    super.storeValue(target, property, value, receiver);    
     this.cached = value;
   }
   trackRule(value) {
@@ -85,11 +87,13 @@ var Rule = PropertyRule;
 class ProxyRule extends PromisableRule {
   // this.instance is the original target, not the proxy. This allows these two methods to be invoked
   // by other kinds of Rules that do not know the details of our target vs proxy.
-  retrieveValue(target, property) {
+  retrieveValue(target, property, receiver = target) {
+    super.retrieveValue(target, property, receiver);    
     return this.instance[property];
   }
-  storeValue(target, property, value) {
+  storeValue(target, property, value, receiver = target) {
     //if (property === 'length') console.warn(`fixme storeValue(${target}, ${property}, ${value})`);
+    super.storeValue(target, property, value, receiver);    
     this.instance[property] = value;
   }
   resetReferences() {
