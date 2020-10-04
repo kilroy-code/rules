@@ -1,6 +1,6 @@
 {
   "name": "@kilroy-code/rules",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Cached, demand-driven computations with dependency-directed-backtracking and full support for Promises.",
   "keywords": [
     "demand-driven",
