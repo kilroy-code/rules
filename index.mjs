@@ -1,7 +1,7 @@
-import { Property } from './property.mjs';
 import { Proxied } from './proxied.mjs';
+import { Computed } from './computed.mjs';
 import { Eager } from './eager.mjs';
-export var Rule = Property;
+export var Rule = Computed;
 
 Rule.Eager = Eager;
 

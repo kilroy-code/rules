@@ -1,8 +1,8 @@
-import { Computed } from './computed.mjs';
+import { Promisable } from './promisable.mjs';
 
-export class Property extends Computed {
-  constructor(instance, key, init, methodKey) {
-    super(instance, key, methodKey);
+export class Property extends Promisable {
+  constructor({init, ...properties}) {
+    super({...properties});
     this.cached = init; // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage.
   }
   retrieveValue(target, property, receiver = target) {
@@ -34,7 +34,7 @@ export class Property extends Computed {
     let ensureRule = (instance) => {
       // The actual Rule object is added lazilly, only when the property is first accessed (by get or set).
       if (instance.hasOwnProperty(ruleKey)) return instance[ruleKey];
-      return instance[ruleKey] = new this(instance, key, init, methodKey);
+      return instance[ruleKey] = new this({instance, key, init, methodKey});
     };
     delete objectOrProto[ruleKey]; // attach clears any previous rule.
     return Object.defineProperty(objectOrProto, key, {

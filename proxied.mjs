@@ -20,7 +20,7 @@ export class Proxied extends Promisable {
       if (!ruleKey) return;
       var rule = rulesStore[ruleKey];
       if (rule !== undefined) return rule;
-      return rulesStore[ruleKey] = new this(target, key);
+      return rulesStore[ruleKey] = new this({instance: target, key});
     }
     return new Proxy(target, {
       // This simple version is the heart of dependency-directed backtracking.

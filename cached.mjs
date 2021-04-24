@@ -2,10 +2,9 @@
   Cached
     Tracked
       Promisable
-        //Property (desired)
+        Property
           Computed
-            Property (currently)
-              Eager
+            Eager
         Proxied
 vs
   TrackingRule

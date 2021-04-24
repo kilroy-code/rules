@@ -4,7 +4,7 @@ import { RuleStack } from './ruleStack.mjs';
 // An abstract rule that only only supports get/set/reset in terms of informing the other rules when it is used, and resetting them when set.
 // Subclasses must arrange for the actual computation and storage.
 export class Tracked extends Cached {
-  constructor(instance, key) { // instance must be the specific instance, not the __proto__.
+  constructor({instance, key}) { // instance must be the specific instance, not the __proto__.
     super();
     this.key = key;
     this.instance = instance;
