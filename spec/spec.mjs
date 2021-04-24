@@ -1137,4 +1137,17 @@ expensive compute b`);
       })      
     });
   });
+  describe('internals', function () {
+    it('prints rules as [class [instance] key]', function () {
+      let array = [1, 2],
+          proxied = Rule.rulify(array),
+          object = {someRule: self => proxied[0]};
+      Rule.rulify(object);
+      object.toString = () => "[fred]";
+      expect(object.someRule).toBe(1);
+      expect(object._someRule.toString()).toBe("[Computed [fred] someRule]");
+      window.fixme = object._someRule;
+      expect(object._someRule.requires[0].toString()).toBe("[Proxied [1,2] 0]");
+    });
+  });
 });

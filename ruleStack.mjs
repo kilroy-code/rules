@@ -18,7 +18,7 @@ export class RuleStack extends Array {
     rule._collectingReferences = [];
   }
   restoreComputing(rule) {
-    rule._collectingReferences.forEach(reference => rule.addReference(reference));
+    rule._collectingReferences.forEach(reference => rule.addReferenceIfNew(reference));
     delete rule._collectingReferences;
     this.pop();
   }

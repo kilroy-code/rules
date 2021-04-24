@@ -3,7 +3,8 @@ import { Promisable } from './promisable.mjs';
 export class Property extends Promisable {
   constructor({init, ...properties}) {
     super({...properties});
-    this.cached = init; // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage.
+    // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage even when no init.
+    this.cached = init;
   }
   retrieveValue(target, property, receiver = target) {
     // Supers don't define this:

@@ -12,6 +12,12 @@ export class Proxied extends Promisable {
     super.storeValue(target, property, value, receiver);    
     this.instance[property] = value;
   }
+  instanceToString() {
+    // Seems unnecessary, until you wonder why a rule attached to the array [x] prints
+    // as [ProxyRule x foo] instead of [ProxyRule [x] foo]!
+    return `[${this.instance.toString()}]`;
+  }
+
   // Answer a proxy that automatically tracks any property that answers a non-empty string for ruleKey(key).
   static attach(target, getRuleKey) {
     let rulesStore = {};

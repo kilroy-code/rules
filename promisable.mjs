@@ -79,7 +79,7 @@ export class Promisable extends Tracked {
   }
   resetReferences() {
     delete this.placeholderPromiseData;
-    return super.resetReferences();
+    super.resetReferences();
   }
 
   trackRule(value) {

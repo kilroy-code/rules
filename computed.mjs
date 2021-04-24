@@ -14,6 +14,19 @@ export class Computed extends Property {
   constructor({methodKey, ...properties}) {
     super({...properties});
     this.methodKey = methodKey;
+    this.requires = []; // Other rules that WE require, for use in resetReferences.
+  }
+  addReference(reference) {
+    super.addReference(reference);
+    this.requires.push(reference);
+  }
+  resetReferences() {
+    let requires = this.requires,
+        notUs = element => element !== this;
+    this.requires = [];
+    super.resetReferences();
+    // Remove us from usedBy of everything that we had required.
+    requires.forEach(required => required.usedBy = required.usedBy.filter(notUs));
   }
   compute(receiver) {
     let method = receiver[this.methodKey];
