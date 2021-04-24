@@ -16,11 +16,6 @@
 
 
 class RuleStack extends Array {
-
-  // This is not thread-safe.
-  // It isn't enough to make different instance of this for each worker, as instances aren't thread safe.
-  static current = new this();
-
   noteComputing(rule) {
     this.push(rule);
     rule._collectingReferences = [];
@@ -40,4 +35,7 @@ class RuleStack extends Array {
     return true;
   }
 }
+// This is not thread-safe.
+// It isn't enough to make different instance of this for each worker, as instances aren't thread safe.
+RuleStack.current = new RuleStack(); // Static class vars not allowed in Safari
 module.exports = RuleStack;
