@@ -1,10 +1,8 @@
-"use strict";
-
-const RuleStack = require('./ruleStack');
+import { RuleStack } from './ruleStack.mjs';
 
 // An abstract rule that only only supports get/set/reset in terms of informing the other rules when it is used, and resetting them when set.
 // Subclasses must arrange for the actual computation and storage.
-class TrackingRule {
+export class TrackingRule {
   constructor(instance, key) { // instance must be the specific instance, not the __proto__.
     this.key = key;
     this.instance = instance;
@@ -58,16 +56,19 @@ class TrackingRule {
     return value;
   }
   set(...args) {
+    return this.setInternal(...args);
+  }
+  reset() {
+    // Same code as set(), but not going through that method, which can redefined for real, application assignments.
+    this.setInternal(this.instance, this.key, undefined);
+  }
+  setInternal(...args) {
     this.storeValue(...args);
     return this.resetReferences();
   }
-  reset() { this.set(this.instance, this.key, undefined); }
 
   // Must be defined by subclasses, and must not add or remove references.
-  retrieveValue(target, property, receiver=target) {
-  }
-  storeValue(target, property, value, receiver=target) {
-  }
+  // retrieveValue(target, property, receiver=target) { }
+  // storeValue(target, property, value, receiver=target) { }
 }
 
-module.exports = TrackingRule;
