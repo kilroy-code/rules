@@ -1,37 +1,6 @@
-import { RuleStack } from './ruleStack.mjs';
-import { PromisableRule } from './promisableRule.mjs';
+import { Computed } from './computed.mjs';
 
-// TODO: Define (and create tests for) what get/set arguments really are, as to target/receiver.
-//       The candidates are rule, self/this/instance, the objectOrPrototype that the rule is defined on, and the proxy (if any).
-//       See comments before ProxyRule.retrieveValue, and keep in mind that this and this.instance are available outside of arguments.
-//       Think in terms of inheritance and event dispatch.
-//       Also, same question for the arguments to fixme/assignment.
-// TODO: factor out 'requires' from basic TrackingRule. Only a ComputedRule needs to track required rules.
-// TODO: reverse the ordering, so that PromisableRule inherits from ComptuedRule, so that applications can use ComputedRules
-// that do NOT try to be fancy with promises. How this is done (mixins?) depends on what ProxyRule needs to do with
-// promise elements. (Maybe split the promise tracking from the promise computing?)
-export class ComputedRule extends PromisableRule {
-  constructor(instance, key, methodKey) {
-    super(instance, key);
-    this.methodKey = methodKey;
-  }
-  compute(receiver) {
-    let method = receiver[this.methodKey];
-    if (!method) return;
-    let stack = RuleStack.current;
-    if (stack.isCircularReference(this)) {
-      throw new Error(`Circular Rule ${this} depends on itself within computation:${stack.map(rule => `\n${rule}`)}.`)
-    }
-    try {
-      stack.noteComputing(this);
-      return method.call(receiver, receiver);
-    } finally {
-      stack.restoreComputing(this);
-    }
-  }
-}
-
-export class PropertyRule extends ComputedRule {
+export class Property extends Computed {
   constructor(instance, key, init, methodKey) {
     super(instance, key, methodKey);
     this.cached = init; // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage.
@@ -51,7 +20,7 @@ export class PropertyRule extends ComputedRule {
     }
     return super.trackRule(value);
   }
-  static attach(objectOrProto, key, methodOrInit, {configurable, assignment = PropertyRule.fixme} = {}) {
+  static attach(objectOrProto, key, methodOrInit, {configurable, assignment = Property.fixme} = {}) {
     // Defines a Rule property on object, which may be an individual instance or a prototype.
     // If a method function is provided it is used to lazily calculate the value when read, if not already set.
     var ruleKey = '_' + key,
@@ -82,4 +51,4 @@ export class PropertyRule extends ComputedRule {
     });
   }
 }
-PropertyRule.fixme = value => value;
+Property.fixme = value => value;

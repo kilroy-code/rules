@@ -1,6 +1,6 @@
-import { PromisableRule } from './promisableRule.mjs';
+import { Promisable } from './promisable.mjs';
 
-export class ProxyRule extends PromisableRule {
+export class Proxied extends Promisable {
   // this.instance is the original target, not the proxy. This allows these two methods to be invoked
   // by other kinds of Rules that do not know the details of our target vs proxy.
   retrieveValue(target, property, receiver = target) {

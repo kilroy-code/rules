@@ -1,5 +1,4 @@
-import { RuleStack } from './ruleStack.mjs';
-import { TrackingRule } from './trackingRule.mjs';
+import { Tracked } from './tracked.mjs';
 
 // TODO:
 // Split the simple parts out into a class Memoize, and Rule that inherits from it.
@@ -33,7 +32,7 @@ await example.reference; // 2
 //   will occur asynchronously from application code. It will either be handled by an explicit rejection
 //   handler, or be treated by the Javascript implentation as an unhandled rejection.)
 
-export class PromisableRule extends TrackingRule {
+export class Promisable extends Tracked {
   storeValue(ruleTarget, property, value, receiver) {
     if (value instanceof Promise) {
       value.then(resolved => this.onResolved(ruleTarget, property, resolved, receiver),
@@ -98,7 +97,7 @@ export class PromisableRule extends TrackingRule {
     try {
       value = this.compute(receiver);
     } catch (thrown) {
-      if (thrown instanceof PromisableRule) {
+      if (thrown instanceof Promisable) {
         // compute() involved a rule whose trackRule saw that it was still a Promise.
         value = new Promise((resolve, reject) => this.placeholderPromiseData = {resolve, reject});
       } else {
