@@ -1,8 +1,5 @@
-"use strict";
-
-const assert = require('assert').strict;
-const RuleStack = require('./ruleStack');
-const TrackingRule = require('./trackingRule');
+import { RuleStack } from './ruleStack.mjs';
+import { TrackingRule } from './trackingRule.mjs';
 
 // TODO:
 // Split the simple parts out into a class Memoize, and Rule that inherits from it.
@@ -36,13 +33,14 @@ await example.reference; // 2
 //   will occur asynchronously from application code. It will either be handled by an explicit rejection
 //   handler, or be treated by the Javascript implentation as an unhandled rejection.)
 
-class PromisableRule extends TrackingRule {
+export class PromisableRule extends TrackingRule {
   storeValue(ruleTarget, property, value, receiver) {
     if (value instanceof Promise) {
       value.then(resolved => this.onResolved(ruleTarget, property, resolved, receiver),
                  reason => this.onRejected(ruleTarget, property, reason, receiver));
     }
-    return super.storeValue(ruleTarget, property, value, receiver);
+    // TrackingRule doesn't define any:
+    // return super.storeValue(ruleTarget, property, value, receiver);
   }
   onResolved(target, property, resolved, receiver) {
     // Store resolved value and re-demand each dependency (resolving dependencies as possible).
@@ -86,11 +84,11 @@ class PromisableRule extends TrackingRule {
   }
 
   trackRule(value) {
-    let isTracking = super.trackRule(value);
-    if (isTracking && (value instanceof Promise)) {
+    if (!super.trackRule(value)) return false;
+    if (value instanceof Promise) {
       throw this; // So that the computing rule that uses us can track this Promise in its catch.
     }
-    return isTracking;
+    return true;
   }
   retrieveOrComputeValue(target, property, receiver = target) {
     let value = this.retrieveValue(target, property, receiver);
@@ -111,4 +109,4 @@ class PromisableRule extends TrackingRule {
     return value;
   }
 }
-module.exports = PromisableRule;
+
