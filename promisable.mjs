@@ -89,23 +89,22 @@ export class Promisable extends Tracked {
     }
     return true;
   }
-  retrieveOrComputeValue(target, property, receiver = target) {
-    let value = this.retrieveValue(target, property, receiver);
-    
-    if (value !== undefined) return value;
-    
-    try {
-      value = this.compute(receiver);
-    } catch (thrown) {
-      if (thrown instanceof Promisable) {
-        // compute() involved a rule whose trackRule saw that it was still a Promise.
-        value = new Promise((resolve, reject) => this.placeholderPromiseData = {resolve, reject});
-      } else {
-        throw thrown; // Not a Promise rule, so re-signal the error.
+  get(target, property, receiver = target) {
+    if (undefined === this.retrieveValue(target, property, receiver)) {
+      let value;
+      try {
+        value = this.compute(receiver);
+      } catch (thrown) {
+        if (thrown instanceof Promisable) {
+          // compute() involved a rule whose trackRule saw that it was still a Promise.
+          value = new Promise((resolve, reject) => this.placeholderPromiseData = {resolve, reject});
+        } else {
+          throw thrown; // Not a Promise rule, so re-signal the error.
+        }
       }
+      this.storeValue(target, property, value, receiver);
     }
-    this.storeValue(target, property, value, receiver);    
-    return value;
+    return super.get(target, property, receiver);
   }
 }
 

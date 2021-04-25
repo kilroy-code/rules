@@ -31,9 +31,6 @@ export class Tracked extends Cached {
     usedBy.forEach(usedBy => usedBy.reset()); // Reset everything that depended on us.
   }
 
-  retrieveOrComputeValue(...args) {
-    return this.retrieveValue(...args);
-  }
   get(...args) {
     let value = super.get(...args);
     this.trackRule(value);
