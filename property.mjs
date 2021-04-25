@@ -6,12 +6,11 @@ export class Property extends Promisable {
     // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage even when no init.
     this.cached = init;
   }
-  retrieveValue(target, property, receiver = target) {
-    // Supers don't define this:
-    // super.retrieveValue(target, property, receiver);
+  retrieveValue() {
+    // No need: super.retrieveValue(target, property, receiver);
     return this.cached;
   }
-  storeValue(target, property, value, receiver = target) {
+  storeValue(target, property, value, receiver = this.instance) {
     super.storeValue(target, property, value, receiver);    
     this.cached = value;
   }
@@ -21,7 +20,7 @@ export class Property extends Promisable {
     }
     return super.trackRule(value);
   }
-  static attach(objectOrProto, key, methodOrInit, {configurable, assignment = Property.fixme} = {}) {
+  static attach(objectOrProto, key, methodOrInit, {configurable, assignment = (value => value)} = {}) {
     // Defines a Rule property on object, which may be an individual instance or a prototype.
     // If a method function is provided it is used to lazily calculate the value when read, if not already set.
     var ruleKey = '_' + key,
@@ -52,4 +51,3 @@ export class Property extends Promisable {
     });
   }
 }
-Property.fixme = value => value;

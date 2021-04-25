@@ -33,13 +33,31 @@ await example.reference; // 2
 //   handler, or be treated by the Javascript implentation as an unhandled rejection.)
 
 export class Promisable extends Tracked {
-  storeValue(ruleTarget, property, value, receiver) {
+  storeValue(target, property, value, receiver = target) {
     if (value instanceof Promise) {
-      value.then(resolved => this.onResolved(ruleTarget, property, resolved, receiver),
-                 reason => this.onRejected(ruleTarget, property, reason, receiver));
+      value.then(resolved => this.onResolved(target, property, resolved, receiver),
+                 reason => this.onRejected(target, property, reason, receiver));
     }
-    // TrackingRule doesn't define any:
-    // return super.storeValue(ruleTarget, property, value, receiver);
+    // No need: super.storeValue(ruleTarget, property, value, receiver);
+  }
+
+  trackRule(value) {
+    if (!super.trackRule(value)) return false;
+    if (value instanceof Promise) {
+      throw this; // So that the computing rule that uses us can track this Promise in its catch.
+    }
+    return true;
+  }
+  maybeBecomePromisableByContagion(thrown) {
+    if (thrown instanceof Promisable) {
+      // A Computed subclass required something that threw a Promise in trackRule, above.
+      return new Promise((resolve, reject) => this.placeholderPromiseData = {resolve, reject});
+    }
+    throw thrown; // Not a Promise rule, so re-signal the error.
+  }
+  resetReferences() {
+    delete this.placeholderPromiseData;
+    super.resetReferences();
   }
   onResolved(target, property, resolved, receiver) {
     // Store resolved value and re-demand each dependency (resolving dependencies as possible).
@@ -72,39 +90,6 @@ export class Promisable extends Tracked {
       if (!retry) return;
       retry.reject(reason);
     });
-  }
-
-  compute(receiver) {
-    // Subclasses that do something must also track dependencies through note/restoreComputing.
-  }
-  resetReferences() {
-    delete this.placeholderPromiseData;
-    super.resetReferences();
-  }
-
-  trackRule(value) {
-    if (!super.trackRule(value)) return false;
-    if (value instanceof Promise) {
-      throw this; // So that the computing rule that uses us can track this Promise in its catch.
-    }
-    return true;
-  }
-  get(target, property, receiver = target) {
-    if (undefined === this.retrieveValue(target, property, receiver)) {
-      let value;
-      try {
-        value = this.compute(receiver);
-      } catch (thrown) {
-        if (thrown instanceof Promisable) {
-          // compute() involved a rule whose trackRule saw that it was still a Promise.
-          value = new Promise((resolve, reject) => this.placeholderPromiseData = {resolve, reject});
-        } else {
-          throw thrown; // Not a Promise rule, so re-signal the error.
-        }
-      }
-      this.storeValue(target, property, value, receiver);
-    }
-    return super.get(target, property, receiver);
   }
 }
 

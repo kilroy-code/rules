@@ -1,5 +1,6 @@
 import { RuleStack } from './ruleStack.mjs';
 import { Property } from './property.mjs';
+import { Promisable } from './promisable.mjs';
 
 // TODO: Define (and create tests for) what get/set arguments really are, as to target/receiver.
 //       The candidates are rule, self/this/instance, the objectOrPrototype that the rule is defined on, and the proxy (if any).
@@ -28,18 +29,25 @@ export class Computed extends Property {
     // Remove us from usedBy of everything that we had required.
     requires.forEach(required => required.usedBy = required.usedBy.filter(notUs));
   }
-  compute(receiver) {
-    let method = receiver[this.methodKey];
-    if (!method) return; // FIXME: throw explicit error?
+  retrieveValue(target, property, receiver = this.instance) {
+    let value = super.retrieveValue(target, property, receiver);
+    if (undefined !== value) return value;
+    // Compute and store it, noting any required rules.
     let stack = RuleStack.current;
     if (stack.isCircularReference(this)) {
       throw new Error(`Circular Rule ${this} depends on itself within computation:${stack.map(rule => `\n${rule}`)}.`)
     }
     try {
       stack.noteComputing(this);
-      return method.call(receiver, receiver);
+
+      value = receiver[this.methodKey].call(receiver, receiver);
+    } catch (thrown) {
+      value = this.maybeBecomePromisableByContagion(thrown);
     } finally {
+
       stack.restoreComputing(this);
     }
+    this.storeValue(target, property, value, receiver);
+    return value;
   }
 }

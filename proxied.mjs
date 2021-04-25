@@ -3,13 +3,13 @@ import { Promisable } from './promisable.mjs';
 export class Proxied extends Promisable {
   // this.instance is the original target, not the proxy. This allows these two methods to be invoked
   // by other kinds of Rules that do not know the details of our target vs proxy.
-  retrieveValue(target, property, receiver = target) {
-    // super does not define an implementation:
-    // super.retrieveValue(target, property, receiver);    
+  //
+  retrieveValue(target, property, proxyReceiver = target) {
+    // No need: super.retrieveValue(target, property, receiver);
     return this.instance[property];
   }
-  storeValue(target, property, value, receiver = target) {
-    super.storeValue(target, property, value, receiver);    
+  storeValue(target, property, value, proxyReceiver = target) {
+    super.storeValue(target, property, value, proxyReceiver);
     this.instance[property] = value;
   }
   instanceToString() {
@@ -30,16 +30,19 @@ export class Proxied extends Promisable {
     }
     return new Proxy(target, {
       // This simple version is the heart of dependency-directed backtracking.
-      // It does not cache results, compute values, nor resolve promises.
+      // It does not compute values, nor resolve promises (although we inherit from Promisable, which does resolve promises).
       // TODO: ensure there is a test case for when ruleKey answers falsy.
-      get: function (target, key) {
-        if (key === 'toString') return _ => `[${target.toString()}]`;
+      // If there is no rule (because getRuleKey said no, as for anything other than an integer or 'length'),
+      // then we use Reflect.get/.set, which should pull it from the original target (which is where we
+      // happen to actually store the values, per store/retrieveValue).
+      get: function (target, key, proxy = this) {
+        if (key === 'toString') return _ => this.instanceToString();
         let rule = ensureRule(key);
-        return (rule || Reflect).get(target, key, target);
+        return (rule || Reflect).get(target, key, proxy);
       },
-      set: function (target, key, value) {
+      set: function (target, key, value, proxy = this) {
         let rule = ensureRule(key);
-        return (rule || Reflect).set(target, key, value, target);
+        return (rule || Reflect).set(target, key, value, proxy);
       }
     });
   }

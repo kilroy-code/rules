@@ -6,12 +6,9 @@
           Computed
             Eager
         Proxied
- */
+*/
 
 // An abstract rule that only only supports get/set/reset, and printing.
-// Subclasses must define the actual:
-//   retrieveValue(target, property, receiver=target) { }
-//   storeValue(target, property, value, receiver=target) { }
 export class Cached {
   constructor({instance, key}) { // instance must be the specific instance, not the __proto__.
     this.instance = instance;
@@ -24,11 +21,14 @@ export class Cached {
     return this.instance.toString();
   }
 
-  get(...args) {
-    return this.retrieveValue(...args);
+  // get and set can be used directly, exactly as for the Reflect protocol.
+  // In fact, Reflect.get and .set should work on rules.
+  // In a proxy, get(originalTargetBeingProxied, propertyName, proxyReceiverOrObjectThatInheritsFromIt)
+  get() {
+    return this.retrieveValue(...arguments);
   }
-  set(...args) {
-    this._setInternal(...args);
+  set() {
+    this._setInternal(...arguments);
     return true; // To be compatible with Reflect.set and Proxy handler.set, must answer a success boolean.
   }
   reset() {
@@ -36,7 +36,10 @@ export class Cached {
     this._setInternal(this.instance, this.key, undefined);
   }
 
-  _setInternal(...args) {
-    this.storeValue(...args);
+  _setInternal() {
+    this.storeValue(...arguments);
   }
+  // Subclasses must define the actual methods:
+  // retrieveValue(target, property, receiver=target) { }
+  // storeValue(target, property, value, receiver=target) { }
 }

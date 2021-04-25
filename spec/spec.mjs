@@ -1149,5 +1149,7 @@ expensive compute b`);
       window.fixme = object._someRule;
       expect(object._someRule.requires[0].toString()).toBe("[Proxied [1,2] 0]");
     });
+    xdescribe('matches Reflect.get/set protocol', function () {
+    });
   });
 });
