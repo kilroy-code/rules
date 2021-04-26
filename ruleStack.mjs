@@ -10,16 +10,14 @@
    3. stack.isCircularReference(referencedRule) will answer true IFF the tracked rule is already the subject
       of an unresolved stack.trackRule(referencedRule).
       TODO: Clean this up and shrink the API.
-   4. The computingRule is given an additional property named '_collectingReferences' (which is then removed).
 */
 export class RuleStack extends Array {
   noteComputing(rule) {
     this.push(rule);
-    rule._collectingReferences = [];
   }
   restoreComputing(rule) {
-    rule._collectingReferences.forEach(reference => rule.addReferenceIfNew(reference));
-    delete rule._collectingReferences;
+    rule.collectingReferences.forEach(reference => rule.addReferenceIfNew(reference));
+    rule.collectingReferences.length = 0;
     this.pop();
   }
   isCircularReference(rule) {
@@ -28,7 +26,7 @@ export class RuleStack extends Array {
   trackRule(rule) {
     let length = this.length;
     if (!length) return false;
-    this[length - 1]._collectingReferences.push(rule);
+    this[length - 1].collectingReferences.push(rule);
     return true;
   }
 }

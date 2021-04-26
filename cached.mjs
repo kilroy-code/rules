@@ -13,6 +13,7 @@ export class Cached {
   constructor({instance, key}) { // instance must be the specific instance, not the __proto__.
     this.instance = instance;
     this.key = key;
+    this.collectingReferences = [];
   }
   toString() {
     return `[${this.constructor.name} ${this.instanceToString()} ${this.key}]`;
