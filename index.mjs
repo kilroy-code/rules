@@ -1,14 +1,9 @@
-import { PropertyRule } from './propertyRule.mjs';
-import { ProxyRule } from './proxyRule.mjs';
-export var Rule = PropertyRule;
+import { Proxied } from './proxied.mjs';
+import { Computed } from './computed.mjs';
+import { Eager } from './eager.mjs';
+export var Rule = Computed;
 
-class EagerRule extends PropertyRule {
-  reset() {
-    super.reset();
-    setTimeout(_ => this.get(this.instance, this.property)); // FIXME: really nextTick
-  }
-}
-Rule.EagerRule = EagerRule;
+Rule.Eager = Eager;
 
 function rulifiablePropertyName(key) { // We don't want to rulify array methods
   let keyString = key.toString();
@@ -21,17 +16,17 @@ function rulifiablePropertyName(key) { // We don't want to rulify array methods
 // Convert an entire instance or prototype, or list to Rules.
 Rule.rulify = function rulify(object, {
   asArray = Array.isArray(object),
-  ruleClass = asArray ? ProxyRule : Rule,
+  ruleClass = asArray ? Proxied : Rule,
   ruleNames = asArray ?
     [rulifiablePropertyName] :
     Object.getOwnPropertyNames(object).filter(function (prop) { return 'constructor' !== prop; }),
   eagerNames = [],
-  ...configuration // Might include, e.g., configurable, assignment, ...  See PropertyRule.attach().
+  ...configuration // Might include, e.g., configurable, assignment, ...  See Property.attach().
 } = {}) {
   let result = object;
   ruleNames.forEach(function (key) {
     let isEager = eagerNames.includes(key);
-    let klass = isEager ? EagerRule : ruleClass; // fixme
+    let klass = isEager ? Eager : ruleClass; // fixme
     result = klass.attach(object, key, object[key], configuration);
   });
   return result;
