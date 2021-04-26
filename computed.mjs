@@ -12,9 +12,26 @@ import { Promisable } from './promisable.mjs';
 // that do NOT try to be fancy with promises. How this is done (mixins?) depends on what ProxyRule needs to do with
 // promise elements. (Maybe split the promise tracking from the promise computing?)
 export class Computed extends Property {
-  constructor({methodKey, ...properties}) {
-    super({...properties});
-    this.methodKey = methodKey;
+
+  // FIXME: This is an optimized version that basically expands calls inline. Why doesn't the compiler do this for us?
+  get(target, property, receiver = this.instance) {
+    let value = this.cached; // expand retrieveValue
+    if (undefined === value) {
+      value = this.compute(receiver);
+      // expand storeValue
+      this.cached = value;
+      if (value instanceof Promise) this.setupPromiseResolution(target, property, value, receiver);
+    }
+    // expand trackRule:
+    if (value === undefined) throw new Error(`No Rule value returned for ${this}.`); // Property rule
+    if (!RuleStack.current.trackRule(this)) return value; // Tracked rule
+    if (value instanceof Promise) throw this; // Promisable rule
+    return value;
+  }
+
+  constructor(props) {
+    super(props);
+    this.methodKey = props.methodKey;
     this.requires = []; // Other rules that WE require, for use in resetReferences.
   }
   addReference(reference) {
@@ -32,8 +49,13 @@ export class Computed extends Property {
   retrieveValue(target, property, receiver = this.instance) {
     let value = super.retrieveValue(target, property, receiver);
     if (undefined !== value) return value;
+    value = this.compute(receiver);
+    this.storeValue(target, property, value, receiver);
+    return value;
+  }
+  compute(receiver) {
     // Compute and store it, noting any required rules.
-    let stack = RuleStack.current;
+    let value, stack = RuleStack.current;
     if (stack.isCircularReference(this)) {
       throw new Error(`Circular Rule ${this} depends on itself within computation:${stack.map(rule => `\n${rule}`)}.`)
     }
@@ -47,7 +69,6 @@ export class Computed extends Property {
 
       stack.restoreComputing(this);
     }
-    this.storeValue(target, property, value, receiver);
     return value;
   }
 }

@@ -34,11 +34,12 @@ await example.reference; // 2
 
 export class Promisable extends Tracked {
   storeValue(target, property, value, receiver = target) {
-    if (value instanceof Promise) {
-      value.then(resolved => this.onResolved(target, property, resolved, receiver),
-                 reason => this.onRejected(target, property, reason, receiver));
-    }
+    if (value instanceof Promise) this.setupPromiseResolution(target, property, value, receiver);
     // No need: super.storeValue(ruleTarget, property, value, receiver);
+  }
+  setupPromiseResolution(target, property, value, receiver) {
+    value.then(resolved => this.onResolved(target, property, resolved, receiver),
+               reason => this.onRejected(target, property, reason, receiver));
   }
 
   trackRule(value) {
