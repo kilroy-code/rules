@@ -26,6 +26,9 @@ export class RuleStack extends Array {
   trackRule(rule) {
     let length = this.length;
     if (!length) return false;
+    // When we restoreComputing, below, we addReferenceIfNew, because the relationship might have
+    // already been noted in another attempt (e.g., that was interrupted by an unresolved Promise).
+    // So there is no point in ALSO checking for the rule already existing in collectingReferences.
     this[length - 1].collectingReferences.push(rule);
     return true;
   }

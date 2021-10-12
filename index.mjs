@@ -1,7 +1,7 @@
 import { Proxied } from './proxied.mjs';
 import { Computed } from './computed.mjs';
 import { Eager } from './eager.mjs';
-export var Rule = Computed;
+export const Rule = Computed;
 
 Rule.Eager = Eager;
 
@@ -14,6 +14,7 @@ function rulifiablePropertyName(key) { // We don't want to rulify array methods
 }
 
 // Convert an entire instance or prototype, or list to Rules.
+// FIXME: let's either call this create or from, or just make it the constructor. (Make a new package version.)
 Rule.rulify = function rulify(object, {
   asArray = Array.isArray(object),
   ruleClass = asArray ? Proxied : Rule,

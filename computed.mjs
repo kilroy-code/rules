@@ -7,12 +7,16 @@ import { Promisable } from './promisable.mjs';
 //       See comments before Proxied.retrieveValue, and keep in mind that this and this.instance are available outside of arguments.
 //       Think in terms of inheritance and event dispatch.
 //       Also, same question for the arguments to fixme/assignment.
-// TODO: factor out 'requires' from basic TrackingRule. Only a ComputedRule needs to track required rules.
 // TODO: reverse the ordering, so that PromisableRule inherits from ComptuedRule, so that applications can use ComputedRules
 // that do NOT try to be fancy with promises. How this is done (mixins?) depends on what ProxyRule needs to do with
 // promise elements. (Maybe split the promise tracking from the promise computing?)
-export class Computed extends Property {
 
+// A Rule that calls a method to compute a value when there is nothing cached (and then it caches the result).
+export class Computed extends Property {
+  constructor(props) {
+    super(props);
+    this.methodKey = props.methodKey;
+  }
   // FIXME: This is an optimized version that basically expands calls inline. Why doesn't the compiler do this for us?
   get(target, property, receiver = this.instance) {
     let value = this.cached; // expand retrieveValue
@@ -27,24 +31,6 @@ export class Computed extends Property {
     if (!RuleStack.current.trackRule(this)) return value; // Tracked rule
     if (value instanceof Promise) throw this; // Promisable rule
     return value;
-  }
-
-  constructor(props) {
-    super(props);
-    this.methodKey = props.methodKey;
-    this.requires = []; // Other rules that WE require, for use in resetReferences.
-  }
-  addReference(reference) {
-    super.addReference(reference);
-    this.requires.push(reference);
-  }
-  resetReferences() {
-    let requires = this.requires,
-        notUs = element => element !== this;
-    this.requires = [];
-    super.resetReferences();
-    // Remove us from usedBy of everything that we had required.
-    requires.forEach(required => required.usedBy = required.usedBy.filter(notUs));
   }
   retrieveValue(target, property, receiver = this.instance) {
     let value = super.retrieveValue(target, property, receiver);

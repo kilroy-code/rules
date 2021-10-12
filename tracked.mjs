@@ -1,9 +1,9 @@
-import { Cached } from './cached.mjs';
+import { BaseRule } from './baseRule.mjs';
 import { RuleStack } from './ruleStack.mjs';
 
 // An abstract rule that only only supports get/set/reset in terms of informing the other rules when it is used, and resetting them when set.
 // Subclasses must arrange for the actual computation and storage.
-export class Tracked extends Cached {
+export class Tracked extends BaseRule {
   constructor(properties) {
     super(properties);
 
