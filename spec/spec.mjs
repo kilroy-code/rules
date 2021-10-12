@@ -409,6 +409,59 @@ describe('A Rule', function () {
           });
         });
       });
+      it('does not track dependencies after a suspension, but you can always arrange to not have dependiencies there.', async function () {
+        class Async3Kinds {
+          valueOnWhichEverythingDepends() {
+            return 17;
+          }
+          keyToSomething() {
+            return 0;
+          }
+          straightforwardDependency() {
+            return this.keyToSomething + this.valueOnWhichEverythingDepends;
+          }
+          correctInitialAnswerButDoesNotTrackDependency() {
+            return Promise.resolve(this.keyToSomething)
+              .then(resolved => resolved + this.valueOnWhichEverythingDepends);
+          }
+          async alsoCorrectInitialAnswerButDoesNotTrackDependency() {
+            const someMeasurement = await Promise.resolve(this.keyToSomething);
+            return someMeasurement + this.valueOnWhichEverythingDepends;
+          }
+          // Here's how to do it right:
+          standalonePromise() { // Rules can have promise initial values -- just don't put any dependencies in the "second half".
+            return Promise.resolve(this.keyToSomething);
+          }
+          simpleReferenceToStandalonePromise() {
+            return this.standalonePromise + this.valueOnWhichEverythingDepends;
+          }
+        }
+        Rule.rulify(Async3Kinds.prototype);
+        let instance = new Async3Kinds(),
+            initialAnswer = 17;
+
+        // These are all correct.
+        expect(instance.valueOnWhichEverythingDepends).toBe(initialAnswer);
+        expect(await instance.valueOnWhichEverythingDepends).toBe(initialAnswer);        
+        expect(await instance.straightforwardDependency).toBe(initialAnswer);
+        expect(await instance.correctInitialAnswerButDoesNotTrackDependency).toBe(initialAnswer);
+        expect(await instance.alsoCorrectInitialAnswerButDoesNotTrackDependency).toBe(initialAnswer);
+        expect(await instance.simpleReferenceToStandalonePromise).toBe(initialAnswer);
+
+        // Now we change the value on which everything depends, and let's see what recalculates.
+        instance.valueOnWhichEverythingDepends = 42;
+        expect(await instance.straightforwardDependency).toBe(42); // correct
+        expect(await instance.correctInitialAnswerButDoesNotTrackDependency).toBe(initialAnswer); // Did not track dependency
+        expect(await instance.alsoCorrectInitialAnswerButDoesNotTrackDependency).toBe(initialAnswer); // Nor here either;
+        expect(await instance.simpleReferenceToStandalonePromise).toBe(42);        
+
+        // The dependency before the suspension of execution IS correctly tracked.
+        instance.keyToSomething = 1;
+        expect(await instance.straightforwardDependency).toBe(43); // correct
+        expect(await instance.correctInitialAnswerButDoesNotTrackDependency).toBe(43);
+        expect(await instance.alsoCorrectInitialAnswerButDoesNotTrackDependency).toBe(43);
+        expect(await instance.simpleReferenceToStandalonePromise).toBe(43);
+      });
     });
   });
   describe('timing', function () {
@@ -439,7 +492,7 @@ describe('A Rule', function () {
       logger(logLabel, {factor, method, rule});
       expect(factor).toBeLessThan(maximumFactor);
       expect(methodSum).toBe(ruleSum);
-      if (warn && !error) pending();
+      if (warn && !error) pending(`${factor.toPrecision(2)}x`);
     }
     it('of first execution is never > 200x method (damn you Firefox!) and test will skip/warn if > 20x (see console).', function () {
       // Firefox is slow on this. Typically a factor near 90x.
@@ -450,7 +503,7 @@ describe('A Rule', function () {
       // Intially, we expected a factor of 25-30 and were rarely above 40 except for Firefox, which was never above 120.
       // On modularizing the code, we ere often breaking.
       // I've optimized, but Firefox is still sometimes quite high.
-      compare(justTouch, 'initial', 20, 200);
+      compare(justTouch, 'initialRuleMs', 20, 200);
     });
     it('of subsequent execution is never > 25x method and test will skip/warn if > 5x (see console)', function () {
       function evaluate(methods, rules) {
@@ -460,7 +513,12 @@ describe('A Rule', function () {
       // Initially, we expected a factor of 12 and were never over 25.
       // On modularizing the code, we were often breaking 25!
       // There is now an optimized version of Computed.get that is expected to be between 4 or 5. Why doesn't the compiler inline?
-      compare(evaluate, 'subsequent', 5, 25);
+      compare(evaluate, 'subsequentRuleMs', 5, 25);
+    });
+    it('first execution after reset is ...TBD', function () {
+      // Most of the first execution cost above is from lazy instantiation of the rule instance.
+      // We can isolate that part by getting a value (which demands the creation of the rule instance),
+      // and then resetting it, so that we are just left with the cost of computing the value (while tracking).
     });
   });
   describe('using this and self', function () {
@@ -533,7 +591,7 @@ describe('A Rule', function () {
       list.push(3); // change of list resets sum
       expect(other.sum).toBe(7);
 
-      nakedList.push(1); // change of the original list does not reset sum
+      nakedList.push(1); // change of the original list does not reset sum!
       expect(other.sum).toBe(7); // not 8, because 7 is still cached
 
       list.push(2); // change of list resets sum, which picks up change to original list
@@ -693,6 +751,51 @@ expensive compute b`);
         expect(parent.sum).toBe(16);
         expect(computations.join('\n')).toBe(`simple compute a`); // No need to redo expensive computation
       });
+    });
+  });
+  describe('of Rulified array', function () {
+    it('updates rules when element changes.', async function () {
+      let thing = {
+        nakedList: function () { return [0, 1, 2]; }, // Appearing in rule does not (currently) rulfify the value.
+        rulifiedList: function () { return Rule.rulify([0, 1, 2]); }, // An array must be explicitly rulified.
+        refNakedElement: function (self) { return self.nakedList[1]; },
+        refRulifiedElement: function (self) { return self.rulifiedList[1]; }
+      };
+      Rule.rulify(thing);
+      expect(thing.refNakedElement).toBe(1);
+      expect(thing.refRulifiedElement).toBe(1);
+      thing.nakedList[1] = 11;
+      thing.rulifiedList[1] = 11;
+      expect(thing.refNakedElement).toBe(1); // still
+      expect(thing.refRulifiedElement).toBe(11);
+
+      thing.rulifiedList[1] = Promise.resolve(33); // Promises in elements are contagious.
+      expect(await thing.refRulifiedElement).toBe(33);
+    });
+    it('updates rules when length changes.', function () {
+      let thing = {
+        nakedList: function () { return [0, 1, 2]; }, // Appearing in rule does not (currently) rulfify the value.
+        rulifiedList: function () { return Rule.rulify([0, 1, 2]); }, // An array must be explicitly rulified.
+        refNakedList: function (self) { return self.nakedList.reduce((sum, element) => sum + element, 0); },
+        refRulifiedList: function (self) { return self.rulifiedList.reduce((sum, element) => sum + element, 0); }
+      };
+      Rule.rulify(thing);
+      expect(thing.refNakedList).toBe(3);
+      expect(thing.refRulifiedList).toBe(3);
+      thing.nakedList[1] = 11;    // now [0, 11, 2]
+      thing.rulifiedList[1] = 11; // ditto
+      expect(thing.refNakedList).toBe(3);
+      expect(thing.refRulifiedList).toBe(13);
+      thing.nakedList.push(3);    // now [0, 11, 2, 3]
+      thing.rulifiedList.push(3); // ditto
+      expect(thing.nakedList.length).toBe(4);
+      expect(thing.rulifiedList.length).toBe(4);      
+      expect(thing.refNakedList).toBe(3);
+      expect(thing.refRulifiedList).toBe(16);
+      thing.nakedList.length = 3;    // now [0, 11, 2]
+      thing.rulifiedList.length = 3; // ditto
+      expect(thing.refNakedList).toBe(3);
+      expect(thing.refRulifiedList).toBe(13);
     });
   });
   describe('with Promises', function () {
@@ -942,7 +1045,7 @@ expensive compute b`);
         }   
         Rule.rulify(SomeClient.prototype, {assignment: send});
         it('resolves only when both are done', async function () {
-          let i = new SomeClient;
+          let i = new SomeClient();
           i.property = 1;
           let promise = i.property;
           i.property = 2;
@@ -1023,7 +1126,7 @@ expensive compute b`);
       define('indirectly', 'reference');
     });
     describe('can', function () {
-      it('no have an initial Promise value (without compute) that resolves.', async function () {
+      it('not have an initial Promise value (without compute) that resolves.', async function () {
         let object = Rule.attach({}, 'rule', Promise.resolve(17)),
             result = await object.rule;
         expect(result).toBe(17); // That's fine.
@@ -1155,7 +1258,22 @@ expensive compute b`);
       window.fixme = object._someRule;
       expect(object._someRule.requires[0].toString()).toBe("[Proxied [1,2] 0]");
     });
-    xdescribe('matches Reflect.get/set protocol', function () {
+    describe('Reflect.get/set protocol', function () {
+      class Reflector {
+        foo() { return 42; }
+      }
+      Rule.rulify(Reflector.prototype);
+      it('can be get.', function () {
+        let reflector = new Reflector();
+        expect(Reflect.get(reflector, 'foo')).toBe(42);
+        reflector.foo = 17;
+        expect(Reflect.get(reflector, 'foo')).toBe(17);
+      });
+      it('can be set.', function () {
+        let reflector = new Reflector();
+        expect(Reflect.set(reflector, 'foo', 17));
+        expect(reflector.foo).toBe(17);
+      });
     });
   });
 });
