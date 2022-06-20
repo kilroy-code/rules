@@ -1,5 +1,5 @@
 /* 
-   Call stack.noteComputing(computingRule) and stack.restoreComputing(computingRule) around the computation of a rule.
+   Call stack.noteComputing(computingRule) and stack.restoreComputing(computingRule) around the computation of a ComputedRule.
    During this interval:
    1. stack.trackRule(referencedRule) should be called for each rule that the computation requires.
       It answers truthy, unless it is called outside the interval, in which case it answers false.

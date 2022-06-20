@@ -34,10 +34,11 @@ await example.reference; // 2
 
 export class Promisable extends Tracked {
   storeValue(target, property, value, receiver = target) {
-    if (value instanceof Promise) this.setupPromiseResolution(target, property, value, receiver);
+    this.setupPromiseResolution(target, property, value, receiver);
     // No need: super.storeValue(ruleTarget, property, value, receiver);
   }
   setupPromiseResolution(target, property, value, receiver) {
+    if (!(value instanceof Promise)) return;
     value.then(resolved => this.onResolved(target, property, resolved, receiver),
                reason => this.onRejected(target, property, reason, receiver));
   }
@@ -52,12 +53,12 @@ export class Promisable extends Tracked {
   maybeBecomePromisableByContagion(thrown) {
     if (thrown instanceof Promisable) {
       // A Computed subclass required something that threw a Promise in trackRule, above.
-      return new Promise((resolve, reject) => this.placeholderPromiseData = {resolve, reject});
+      return new Promise((resolve, reject) => this.placeholderPromiseResolvers = {resolve, reject});
     }
     throw thrown; // Not a Promise rule, so re-signal the error.
   }
   resetReferences() {
-    delete this.placeholderPromiseData;
+    delete this.placeholderPromiseResolvers;
     super.resetReferences();
   }
   onResolved(target, property, resolved, receiver) {
@@ -68,7 +69,7 @@ export class Promisable extends Tracked {
     // (IWBNI we did this in a way that produced less garbage.)
     let usedBy = [],
         add1 = (rule) => {
-          if (rule !== this) usedBy.push({rule, placeholder: rule.placeholderPromiseData});
+          if (rule !== this) usedBy.push({rule, placeholder: rule.placeholderPromiseResolvers});
           rule.usedBy.forEach(add1);
         };
     add1(this);
@@ -87,7 +88,7 @@ export class Promisable extends Tracked {
   }
   onRejected(target, property, reason, receiver) {
     this.usedBy.forEach(dependent => {
-      let retry = dependent.placeholderPromiseData;
+      let retry = dependent.placeholderPromiseResolvers;
       if (!retry) return;
       retry.reject(reason);
     });

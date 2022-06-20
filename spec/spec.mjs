@@ -481,9 +481,9 @@ describe('A Rule', function () {
       let start = performance.now(),
           methodSum = methods.reduce((sum, instance) => sum + instance.someValue(), 0),
           mid = performance.now(),
-          method = mid - start,
           ruleSum = rules.reduce((sum, instance) => sum + instance.someValue, 0),
           end = performance.now(),
+          method = mid - start,
           rule = end - mid,
           factor = rule / method,
           warn = factor > typicalFactor,
@@ -494,31 +494,44 @@ describe('A Rule', function () {
       expect(methodSum).toBe(ruleSum);
       if (warn && !error) pending(`${factor.toPrecision(2)}x`);
     }
-    it('of first execution is never > 200x method (damn you Firefox!) and test will skip/warn if > 20x (see console).', function () {
-      // Firefox is slow on this. Typically a factor near 90x.
-      function justTouch(methods, rules) {
-        methods.forEach(element => element);
-        rules.forEach(element => element);
-      }
-      // Intially, we expected a factor of 25-30 and were rarely above 40 except for Firefox, which was never above 120.
-      // On modularizing the code, we ere often breaking.
-      // I've optimized, but Firefox is still sometimes quite high.
-      compare(justTouch, 'initialRuleMs', 20, 200);
-    });
-    it('of subsequent execution is never > 25x method and test will skip/warn if > 5x (see console)', function () {
+    it('referencing a computed method (with tracking) is never > 20x method and test will skip/warn if > 9x (see console)', function () {
       function evaluate(methods, rules) {
         methods.forEach(element => element.someValue());
         rules.forEach(element => element.someValue);
       }
-      // Initially, we expected a factor of 12 and were never over 25.
-      // On modularizing the code, we were often breaking 25!
-      // There is now an optimized version of Computed.get that is expected to be between 4 or 5. Why doesn't the compiler inline?
-      compare(evaluate, 'subsequentRuleMs', 5, 25);
+      // Factors on Intel Mac June '22:
+      //   Chrome:  2
+      //   Edge:    3
+      //   Firefox: 8
+      //   Safari: 18
+      // Initial version was 12 => 25. Second was 4-5 on Chrome.
+      compare(evaluate, 'subsequentRuleMs', 9, 20);
     });
-    it('first execution after reset is ...TBD', function () {
-      // Most of the first execution cost above is from lazy instantiation of the rule instance.
-      // We can isolate that part by getting a value (which demands the creation of the rule instance),
-      // and then resetting it, so that we are just left with the cost of computing the value (while tracking).
+    it('first computation after reset is never > 40x method and test will ski/warn if > 25x (see console).', function () {
+      // Factors on Intel Mac June '22:
+      //   Chrome:  23 - Why is Chrome and Edge SLOWER after a reset? Breaks some optimization? Does that mean test is invalid?
+      //   Edge:    32
+      //   Safari:  23
+      //   Firefox: 18
+      function evaluateAndReset(methods, rules) {
+        methods.forEach(element => element.someValue());
+        rules.forEach(element => element.someValue);   // Instantiate the rule...
+        rules.forEach(element => element.someValue = undefined); // ... but then reset it so that it needs to compute.
+      }
+      compare(evaluateAndReset, 'initialExecutionAfterResetMs', 25, 40);
+    });
+    it('of lazy creation of rule and tracked computation is never > 75x method (damn you Firefox!) and test will skip/warn if > 40x (see console).', function () {
+      // Factors on Intel Mac June '22:
+      //   Chrome:  15
+      //   Edge:    20
+      //   Safari:  38
+      //   Firefox: 75
+      // Initial version was typically 25-30 and never over 40, except Firefox near 100.
+      function justTouch(methods, rules) { // Does not demand rule, so these instances do not have the rule instantiated yet.
+        methods.forEach(element => element);
+        rules.forEach(element => element);
+      }
+      compare(justTouch, 'initialLazyRuleInvocationMs', 40, 85);
     });
   });
   describe('using this and self', function () {
@@ -591,17 +604,15 @@ describe('A Rule', function () {
       list.push(3); // change of list resets sum
       expect(other.sum).toBe(7);
 
-      nakedList.push(1); // change of the original list does not reset sum!
-      expect(other.sum).toBe(7); // not 8, because 7 is still cached
-
-      list.push(2); // change of list resets sum, which picks up change to original list
-      expect(other.sum).toBe(10);
-
       list.pop();
-      expect(other.sum).toBe(8);
+      expect(other.sum).toBe(4);
 
       list.splice(1, 1);
-      expect(other.sum).toBe(6);
+      expect(other.sum).toBe(2);
+
+      nakedList.push(1); // change of the original list does not reset sum!
+      expect(other.sum).toBe(2); // not 3, because 2 is still cached
+      // After this, it is not specified whether a change of list picks up changes to original list.
     });
     it("supports a recursive idiom", () => {
       var component = Rule.rulify({
@@ -782,20 +793,23 @@ expensive compute b`);
       Rule.rulify(thing);
       expect(thing.refNakedList).toBe(3);
       expect(thing.refRulifiedList).toBe(3);
+
       thing.nakedList[1] = 11;    // now [0, 11, 2]
       thing.rulifiedList[1] = 11; // ditto
       expect(thing.refNakedList).toBe(3);
       expect(thing.refRulifiedList).toBe(13);
+
       thing.nakedList.push(3);    // now [0, 11, 2, 3]
       thing.rulifiedList.push(3); // ditto
       expect(thing.nakedList.length).toBe(4);
       expect(thing.rulifiedList.length).toBe(4);      
-      expect(thing.refNakedList).toBe(3);
-      expect(thing.refRulifiedList).toBe(16);
+      expect(thing.refNakedList).toBe(3); // Doesn't track changes to naked list.
+      expect(thing.refRulifiedList).toBe(16); // Notices change and recomputes.
+
       thing.nakedList.length = 3;    // now [0, 11, 2]
       thing.rulifiedList.length = 3; // ditto
-      expect(thing.refNakedList).toBe(3);
-      expect(thing.refRulifiedList).toBe(13);
+      expect(thing.refNakedList).toBe(3); // Doesn't track changes to naked list.
+      expect(thing.refRulifiedList).toBe(13); // Notices change and recomputes.
     });
   });
   describe('with Promises', function () {
@@ -965,26 +979,26 @@ expensive compute b`);
     });
     describe('chains of assigned promises', function () {
       describe('starting with promises that resolve in random orders', function () {
-      /*
-        An interactive application might respond to a user gesture by changing the appearance of 50 things one at a time, 
-        or all at once. We want to encourage the all at once thing in only one cases:
-           If there is a new object (e.g., a new item in the DOM that causs reflow), then it is best to set up that object "offcreen",
-           and then add it to the DOM. In addition to the performance benefit, the user doesn't see a flash of, say, a black square
-           that then turns white.
-        Otherwise, it is generally best to change whatever can be changed, independently of waiting for everything else. 
-        In particular, it is not a great idea to compute 50 different values, and then assign them all, because the big
-        respondToUserGestureByComputing50Things() becomes fragile (if anything breaks the whole thing breaks), and hard to combine
-        with other code that someone else writes.
+	/*
+          An interactive application might respond to a user gesture by changing the appearance of 50 things one at a time,
+          or all at once. We want to encourage the all at once thing in only one cases:
+          If there is a new object (e.g., a new item in the DOM that causs reflow), then it is best to set up that object "offcreen",
+          and then add it to the DOM. In addition to the performance benefit, the user doesn't see a flash of, say, a black square
+          that then turns white.
+          Otherwise, it is generally best to change whatever can be changed, independently of waiting for everything else.
+          In particular, it is not a great idea to compute 50 different values, and then assign them all, because the big
+          respondToUserGestureByComputing50Things() becomes fragile (if anything breaks the whole thing breaks), and hard to combine
+          with other code that someone else writes.
 
-        One of the principle uses of promises in rules is that some activity might cause something to happen on another system
-        that takes some time. We can use the fact that rule promises are contagious to support both the everything-at-once case
-        and the do-what-you-can-when-you-can case. 
-        - For the first, if a big computation hits any promises, the whole thing will be a promise that will not compute 
-         until everything is ready. This can be used in a constructor that will not resolve to an new object until it is 
-         ready, which can then be inserted into the DOM tree.
-        - For the second, just write properties that each depend on one or more other properties that resolve whenever, and the 
+          One of the principle uses of promises in rules is that some activity might cause something to happen on another system
+          that takes some time. We can use the fact that rule promises are contagious to support both the everything-at-once case
+          and the do-what-you-can-when-you-can case.
+          - For the first, if a big computation hits any promises, the whole thing will be a promise that will not compute
+          until everything is ready. This can be used in a constructor that will not resolve to an new object until it is
+          ready, which can then be inserted into the DOM tree.
+          - For the second, just write properties that each depend on one or more other properties that resolve whenever, and the
           properties and any eager dependents resolve individually.
-      */
+	*/
         class RandomPromises {
           p1() { return new Promise(resolve => setTimeout(() => resolve(1), Math.random() * 10)); }
           p2() { return new Promise(resolve => setTimeout(() => resolve(2), Math.random() * 10)); }
@@ -1019,193 +1033,195 @@ expensive compute b`);
         });
       });
       /* 
+         ISSUE: do we need any of this? Shouldn't interception be handled by proxies?
+
          Now consider a rule with assignment interception to promise the value after it has been shared on a network.
          Before the promise resolves, another assignment is made, with another interception. What do observers see?
          - A promise value should indicate a value in flight.
          - The resolved or rejected value should reflect the state of the other system with which we are communicating
-           under a delay. The value (or error) may not be we what we sent.
+         under a delay. The value (or error) may not be we what we sent.
          - A non-promise value should indicate that nothing is in flight at the tick of resolution, and the value 
-           is available for use. For example, a then on that promise shouldn't find that the value is still a promise. (I think?)
+         is available for use. For example, a then on that promise shouldn't find that the value is still a promise. (I think?)
          - Thus by the time it resolves, observers should see the final value. I.e., there is no need for observers
-           to see the intermediate values, because they are not defined. It would depend on the order that the promises
-           are resolved in, and on what other stuff is happening on the other system, which we cannot see until the promise is resolved.
+         to see the intermediate values, because they are not defined. It would depend on the order that the promises
+         are resolved in, and on what other stuff is happening on the other system, which we cannot see until the promise is resolved.
          (Does it matter if it is computed, assigned, or an assignment interception???  If general, change the following!)
+	 describe('an intercepted assignment that gets another intercepted assignment before resolution', function () {
+         // In general, this is like opening a pipe that will not close until the pipe is empty.
+         // Until then, all values are sent to the other system in order (if possible). The pipe leaves the last value or
+         // first failure in place.
+         class SomeClient {
+         property() { } // we're going to assign a value
+         }
+         function send(v, key, self) {
+	 console.log('value:', v, 'existing:', self[key]);
+         return new Promise(resolve => {
+         setTimeout(() => resolve(v), 500);
+         });
+         }
+         Rule.rulify(SomeClient.prototype, {assignment: send});
+         it('resolves only when both are done', async function () {
+         let i = new SomeClient();
+         i.property = 1;
+         let promise = i.property;
+         i.property = 2;
+         expect(await promise).toBe(2);
+         });
+         xit('can be rejected before the second assignment, acting as two assignments (with the first rejected)', function () {
+         });
+         xit('can be rejected by the second after the second is assigned, acting as a single rejection', function () {
+         });
+         xit('can be rejected by the first after the second is assigned, acting as a single rejection', function () {
+         });
+	 });
       */
-      xdescribe('an intercepted assignment that gets another intercepted assignment before resolution', function () {
-        // In general, this is like opening a pipe that will not close until the pipe is empty.
-        // Until then, all values are sent to the other system in order (if possible). The pipe leaves the last value or
-        // first failure in place.
-        class SomeClient {
-          property() { /* we're going to assign a value */ }
-        }
-        function send(v, key, self) {
-          return new Promise(resolve => {
-            setTimeout(() => resolve(v), 10);
-          });
-        }   
-        Rule.rulify(SomeClient.prototype, {assignment: send});
-        it('resolves only when both are done', async function () {
-          let i = new SomeClient();
-          i.property = 1;
-          let promise = i.property;
-          i.property = 2;
-          expect(await promise).toBe(2);
-        });
-        xit('can be rejected before the second assignment, acting as two assignments (with the first rejected)', function () {
-        });
-        xit('can be rejected by the second after the second is assigned, acting as a single rejection', function () {
-        });
-        xit('can be rejected by the first after the second is assigned, acting as a single rejection', function () {
-        });
-      });
-    });
-    describe('does not attempt to treat promises as values within rules', function () {
-      function define(label, reference) {
-        it(label, async () => {
-          function recordedDelayedComputation(label, thunk) {
-            history.push('start ' + label);
-            return new Promise(resolve => {
-              setTimeout(() => {
-                history.push('finish ' + label);
-                resolve(thunk());
-              }, 100);
-            });
-          }
-          function recordedDelayedValue(label, value) {
-            return recordedDelayedComputation(label, () => value);
-          }
-          var history = [],
-              data = Rule.rulify({
-                a: self => recordedDelayedValue('a', Rule.rulify([1])),
-                b: self => recordedDelayedValue('b', {c: 2}),
-                d: self => recordedDelayedComputation('d', () => Rule.rulify({e: self => recordedDelayedValue('e', {f: 3})})),
-                z: self => {
-                  history.push('start z');
-                  let referenceThroughLength = self.a.length - self.a.length;
-                  const result = self.a[referenceThroughLength] + self.b.c + self.d.e.f;
-                  history.push('finish z');
-                  return result;
-                },
-                reference: self => self.z,
-                refA: self => self.a.map(e => e)
+      describe('does not attempt to treat promises as values within rules', function () {
+	function define(label, reference) {
+          it(label, async () => {
+            function recordedDelayedComputation(label, thunk) {
+              history.push('start ' + label);
+              return new Promise(resolve => {
+		setTimeout(() => {
+                  history.push('finish ' + label);
+                  resolve(thunk());
+		}, 100);
               });
-          function check(final, aPart = []) {
-            expect(final).toBe(data.z);
-            expect(final).toBe(6);
-            expect(history).toEqual(aPart.concat([              
+            }
+            function recordedDelayedValue(label, value) {
+              return recordedDelayedComputation(label, () => value);
+            }
+            var history = [],
+		data = Rule.rulify({
+                  a: self => recordedDelayedValue('a', Rule.rulify([1])),
+                  b: self => recordedDelayedValue('b', {c: 2}),
+                  d: self => recordedDelayedComputation('d', () => Rule.rulify({e: self => recordedDelayedValue('e', {f: 3})})),
+                  z: self => {
+                    history.push('start z');
+                    let referenceThroughLength = self.a.length - self.a.length;
+                    const result = self.a[referenceThroughLength] + self.b.c + self.d.e.f;
+                    history.push('finish z');
+                    return result;
+                  },
+                  reference: self => self.z,
+                  refA: self => self.a.map(e => e)
+		});
+            function check(final, aPart = []) {
+              expect(final).toBe(data.z);
+              expect(final).toBe(6);
+              expect(history).toEqual(aPart.concat([
+		'start z',
+		'start b',
+		'finish b',
+
+		'start z',
+		'start d',
+		'finish d',
+
+		'start z',
+		'start e',
+		'finish e',
+
+		'start z',
+		'finish z'
+              ]));
+            }
+            await data[reference].then(final => check(final, [
               'start z',
-              'start b',
-              'finish b',
-              
-              'start z',
-              'start d',
-              'finish d',
-              
-              'start z',
-              'start e',
-              'finish e',
-              
-              'start z',
-              'finish z'
+              'start a',
+              'finish a'
             ]));
+            history = [];
+            expect(data.refA).toEqual([1]);
+            data.a.push(2);
+            data.b = data.d = undefined;
+            await data[reference].then(check);
+            expect(data.refA).toEqual([1, 2]);
+          });
+	}
+	define('directly', 'z');
+	define('indirectly', 'reference');
+      });
+      describe('can', function () {
+	it('not have an initial Promise value (without compute) that resolves.', async function () {
+          let object = Rule.attach({}, 'rule', Promise.resolve(17)),
+              result = await object.rule;
+          expect(result).toBe(17); // That's fine.
+          expect(object.rule instanceof Promise).toBeTruthy(); // No compute method, so it doesn't get replaced.
+	});
+	it('compute an initial Promise value that resolves.', async function () {
+          class Klass {
+            rule() { return Promise.resolve(17); }
           }
-          await data[reference].then(final => check(final, [
-            'start z',
-            'start a',
-            'finish a'
-          ]));
-          history = [];
-          expect(data.refA).toEqual([1]);
-          data.a.push(2);
-          data.b = data.d = undefined;
-          await data[reference].then(check);          
-          expect(data.refA).toEqual([1, 2]);
-        });
-      }
-      define('directly', 'z');
-      define('indirectly', 'reference');
-    });
-    describe('can', function () {
-      it('not have an initial Promise value (without compute) that resolves.', async function () {
-        let object = Rule.attach({}, 'rule', Promise.resolve(17)),
-            result = await object.rule;
-        expect(result).toBe(17); // That's fine.
-        expect(object.rule instanceof Promise).toBeTruthy(); // No compute method, so it doesn't get replaced.
+          Rule.rulify(Klass.prototype);
+          let object = new Klass(),
+              result = await object.rule;
+          expect(result).toBe(17);
+          expect(object.rule).toBe(result);
+	});
+	it('reference a promise that resolves.', async function () {
+          class Klass {
+            promise() { return Promise.resolve(17); }
+            rule() { return this.promise; }
+          }
+          Rule.rulify(Klass.prototype);
+          let object = new Klass(),
+              result = await object.rule;
+          expect(result).toBe(17);
+          expect(object.rule).toBe(result);
+	});
+	it('reference a promise that resolves to produce a promise that resolves.', async function () {
+          class Klass {
+            promise() { return Promise.resolve(17); }
+            rule() { return Promise.resolve(this.promise); }
+          }
+          Rule.rulify(Klass.prototype);
+          let object = new Klass(),
+              result = await object.rule;
+          expect(result).toBe(17);
+          expect(object.rule).toBe(result);
+	});
+	it('reference an array of promises to be resolved.', async function () {
+          class Klass {
+            anotherPromise() { return Promise.resolve(2); }
+            promise() { return [1, this.anotherPromise, Promise.resolve(17)]; }
+            rule() { return Promise.all(this.promise); }
+            ref() { return this.rule; }
+          }
+          Rule.rulify(Klass.prototype);
+          let object = new Klass(),
+              result = await object.rule;
+          expect(result).toEqual([1, 2, 17]);
+          expect(object.rule).toBe(result);
+          expect(object.ref).toBe(result);
+          object.anotherPromise = Promise.resolve(3);
+          let next = await object.ref;
+          expect(next).toEqual([1, 3, 17]);
+	});
       });
-      it('compute an initial Promise value that resolves.', async function () {
-        class Klass {
-          rule() { return Promise.resolve(17); }
-        }
-        Rule.rulify(Klass.prototype);
-        let object = new Klass(),
-            result = await object.rule;
-        expect(result).toBe(17);
-        expect(object.rule).toBe(result);
-      });
-      it('reference a promise that resolves.', async function () {
-        class Klass {
-          promise() { return Promise.resolve(17); }
-          rule() { return this.promise; }
-        }
-        Rule.rulify(Klass.prototype);
-        let object = new Klass(),
-            result = await object.rule;
-        expect(result).toBe(17);
-        expect(object.rule).toBe(result);
-      });
-      it('reference a promise that resolves to produce a promise that resolves.', async function () {
-        class Klass {
-          promise() { return Promise.resolve(17); }
-          rule() { return Promise.resolve(this.promise); }
-        }
-        Rule.rulify(Klass.prototype);
-        let object = new Klass(),
-            result = await object.rule;
-        expect(result).toBe(17);
-        expect(object.rule).toBe(result);
-      });
-      it('reference an array of promises to be resolved.', async function () {
-        class Klass {
-          anotherPromise() { return Promise.resolve(2); }
-          promise() { return [1, this.anotherPromise, Promise.resolve(17)]; }
-          rule() { return Promise.all(this.promise); }
-          ref() { return this.rule; }
-        }
-        Rule.rulify(Klass.prototype);
-        let object = new Klass(),
-            result = await object.rule;
-        expect(result).toEqual([1, 2, 17]);
-        expect(object.rule).toBe(result);
-        expect(object.ref).toBe(result);
-        object.anotherPromise = Promise.resolve(3);
-        let next = await object.ref;
-        expect(next).toEqual([1, 3, 17]);
-      });
-    });
-    describe('assignment can be intercepted', function () {
-      let assigned;
-      afterEach(function () {
+      describe('assignment can be intercepted', function () {
+	let assigned;
+	afterEach(function () {
           assigned = undefined;
-      });
-      describe('for immediate side-effect', function () {
-        function assignment(v) { return assigned = v; }
-        it('before caching.', function () {
-          let instance = Rule.attach({}, 'foo', () => 17, {assignment});
-          instance.foo = 16;
-          expect(instance.foo).toBe(16);
-          expect(assigned).toBe(16);
-        });
-        it('after caching.', function () {
-          let instance = Rule.attach({}, 'foo', () => 17, {assignment});
-          expect(instance.foo).toBe(17);
-          expect(assigned).toBeUndefined();
-          instance.foo = 18;
-          expect(instance.foo).toBe(18);
-          expect(assigned).toBe(18);
-        });
-      });
-      describe('by promise, as though for synchronizing with others', function () {
-        function assignment(v) {
+	});
+	describe('for immediate side-effect', function () {
+          function assignment(v) { return assigned = v; }
+          it('before caching.', function () {
+            let instance = Rule.attach({}, 'foo', () => 17, {assignment});
+            instance.foo = 16;
+            expect(instance.foo).toBe(16);
+            expect(assigned).toBe(16);
+          });
+          it('after caching.', function () {
+            let instance = Rule.attach({}, 'foo', () => 17, {assignment});
+            expect(instance.foo).toBe(17);
+            expect(assigned).toBeUndefined();
+            instance.foo = 18;
+            expect(instance.foo).toBe(18);
+            expect(assigned).toBe(18);
+          });
+	});
+	describe('by promise, as though for synchronizing with others', function () {
+          function assignment(v) {
             // Careful: The implementation is careful to not call this during
             // resets that it does internally. However, an application is
             // allowed to explicitly assign undefined to a rule, effectively restoring
@@ -1215,64 +1231,116 @@ expensive compute b`);
             return new Promise(resolve => setTimeout(_ => {
               resolve(assigned = v);
             }, 500));
-        }
-        it('before caching.', async function () {
-          let instance = Rule.attach({}, 'foo', () => 17, {assignment});
-          instance.foo = 16;
-          expect(instance.foo instanceof Promise).toBeTruthy();
-          expect(await instance.foo).toBe(16);
-          expect(assigned).toBe(16);
-        });
-        it('after caching.', async function () {
-          let instance = Rule.attach({}, 'foo', () => 17, {assignment});
-          expect(instance.foo).toBe(17);
-          expect(assigned).toBeUndefined();
-          instance.foo = 18;
-          expect(await instance.foo).toBe(18);
-         expect(assigned).toBe(18);
-        });
-        it('with dependencies resolving.', async function () {
-          class Observable {
-            foo() { return 17; }
-            bar() { return this.foo; }
           }
-          Rule.rulify(Observable.prototype, {assignment});
-          let instance = new Observable();
-          instance.foo = 16;
-          expect(instance.bar instanceof Promise).toBeTruthy();
-          expect(await instance.bar).toBe(16);
-          expect(assigned).toBe(16);
-        });
-      })      
-    });
-  });
-  describe('internals', function () {
-    it('prints rules as [class [instance] key]', function () {
-      let array = [1, 2],
-          proxied = Rule.rulify(array),
-          object = {someRule: self => proxied[0]};
-      Rule.rulify(object);
-      object.toString = () => "[fred]";
-      expect(object.someRule).toBe(1);
-      expect(object._someRule.toString()).toBe("[Computed [fred] someRule]");
-      window.fixme = object._someRule;
-      expect(object._someRule.requires[0].toString()).toBe("[Proxied [1,2] 0]");
-    });
-    describe('Reflect.get/set protocol', function () {
-      class Reflector {
-        foo() { return 42; }
-      }
-      Rule.rulify(Reflector.prototype);
-      it('can be get.', function () {
-        let reflector = new Reflector();
-        expect(Reflect.get(reflector, 'foo')).toBe(42);
-        reflector.foo = 17;
-        expect(Reflect.get(reflector, 'foo')).toBe(17);
+          it('before caching.', async function () {
+            let instance = Rule.attach({}, 'foo', () => 17, {assignment});
+            instance.foo = 16;
+            expect(instance.foo instanceof Promise).toBeTruthy();
+            expect(await instance.foo).toBe(16);
+            expect(assigned).toBe(16);
+          });
+          it('after caching.', async function () {
+            let instance = Rule.attach({}, 'foo', () => 17, {assignment});
+            expect(instance.foo).toBe(17);
+            expect(assigned).toBeUndefined();
+            instance.foo = 18;
+            expect(await instance.foo).toBe(18);
+            expect(assigned).toBe(18);
+          });
+          it('with dependencies resolving.', async function () {
+            class Observable {
+              foo() { return 17; }
+              bar() { return this.foo; }
+            }
+            Rule.rulify(Observable.prototype, {assignment});
+            let instance = new Observable();
+            instance.foo = 16;
+            expect(instance.bar instanceof Promise).toBeTruthy();
+            expect(await instance.bar).toBe(16);
+            expect(assigned).toBe(16);
+          });
+	});
       });
-      it('can be set.', function () {
-        let reflector = new Reflector();
-        expect(Reflect.set(reflector, 'foo', 17));
-        expect(reflector.foo).toBe(17);
+    });
+    describe('internals', function () {
+      it('prints rules as [class [instance] key]', function () {
+	let array = [1, 2],
+            proxied = Rule.rulify(array),
+            object = {someRule: self => proxied[0]};
+	Rule.rulify(object);
+	object.toString = () => "[fred]";
+	expect(object.someRule).toBe(1);
+	expect(object._someRule.toString()).toBe("[Computed [fred] someRule]");
+	window.fixme = object._someRule;
+	proxied.forEach(_ => _); // The specific behavior of printing is not defined for elements that have not been demanded.
+	expect(object._someRule.requires[0].toString()).toBe("[Proxied [1,2] 0]");
+      });
+      describe('Reflect.get/set protocol', function () {
+	class Reflector {
+          foo() { return 42; }
+	}
+	Rule.rulify(Reflector.prototype);
+	it('can be get.', function () {
+          let reflector = new Reflector();
+          expect(Reflect.get(reflector, 'foo')).toBe(42);
+          reflector.foo = 17;
+          expect(Reflect.get(reflector, 'foo')).toBe(17);
+	});
+	it('can be set.', function () {
+          let reflector = new Reflector();
+          expect(Reflect.set(reflector, 'foo', 17));
+          expect(reflector.foo).toBe(17);
+	});
+      });
+    });
+    describe('with fancy code-related examples', function () {
+      let effects;
+      beforeEach(() => { effects = []; });
+      function effect(label) { effects.push(label); }
+      it('does not depend on ordinary class definitions', function () {
+	class ParentModel {
+	  a() { effect('a'); return new AModel(); }
+	  b() { effect('b'); return new BModel(); }
+	  aFoo() { effect('aFoo'); return this.a.foo; }
+	  bFoo() { effect('bFoo'); return this.b.foo; }
+	  childNames() { effect('names'); return Rule.rulify(['a', 'b']); }
+	  //children() { effect('children'); return Rule.rulify(this.childNames.map(name => this[name]));}
+	  children() {
+	    let children = Rule.rulify([]);
+	    effect('children');
+	    this.childNames.forEach((name, index) => children[index] = this[name]);
+	    return children;
+	  }
+	  bars() { effect('bars'); return Rule.rulify(this.children.map(child => child.bar)); }
+	}
+	class AModel {
+	  foo() { effect('AModel.foo'); return 'a'; }
+	  bar() { effect('AModel.bar'); return 'aa'; }
+	}
+	class AModel1 {
+	  foo() { effect('AModel.foo'); return 'a1'; }
+	  bar() { effect('AModel.bar'); return 'aa1'; }
+	}
+	class BModel {
+	  foo() { effect('BModel.foo'); return 'b'; }
+	  bar() { effect('BModel.bar'); return 'bb'; }
+	}
+	[ParentModel, AModel, AModel1, BModel].forEach(c => Rule.rulify(c.prototype));
+	let parent = new ParentModel();
+	expect(parent.aFoo).toBe('a');
+	expect(parent.bFoo).toBe('b');
+	//parent.children.push(parent.a); // Assigned outside of a rule. children is NOT dependent on a...
+	//parent.children.push(parent.b); // ... nor on b.
+	expect(parent.bars).toEqual(['aa', 'bb']);
+	expect(effects).toEqual(['aFoo', 'a', 'AModel.foo', 'bFoo', 'b', 'BModel.foo', 'bars', 'children', 'names', 'AModel.bar', 'BModel.bar']);
+	effects = [];
+	parent.a = new AModel1();
+	expect(parent.aFoo).toBe('a1');
+	expect(parent.bFoo).toBe('b');
+	expect(parent.bars).toEqual(['aa1', 'bb']);
+	expect(effects).toEqual(['aFoo', 'AModel.foo',
+				 'bars', 'children', // fixme remove
+				 'AModel.bar']); // b, bFoo, ....?.... are still cached.
       });
     });
   });

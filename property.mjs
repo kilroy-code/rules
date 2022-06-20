@@ -2,8 +2,8 @@ import { Promisable } from './promisable.mjs';
 
 // A rule that stores it's sole value for retrieval.
 export class Property extends Promisable {
-  constructor(props) {
-    super(props);
+  init(props) {
+    super.init(props);
     // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage even when no init.
     this.cached = props.init;
     this.requires = []; // Other rules that WE require, for use in resetReferences.    
@@ -53,7 +53,7 @@ export class Property extends Promisable {
     let ensureRule = (instance) => {
       // The actual Rule object is added lazilly, only when the property is first accessed (by get or set).
       if (instance.hasOwnProperty(ruleKey)) return instance[ruleKey];
-      return instance[ruleKey] = new this({instance, key, init, methodKey});
+      return instance[ruleKey] = this.create({instance, key, init, methodKey});
     };
     delete objectOrProto[ruleKey]; // attach clears any previous rule.
     return Object.defineProperty(objectOrProto, key, {
@@ -69,7 +69,7 @@ export class Property extends Promisable {
         // during construction. Is that what we want? (I think not, or at least, we
         // need a way for a supplied assignment function to inspect enough to determine
         // whether or not to do something (such as replicating the value).
-        return rule.set(rule, key, assignment(value, key, this), objectOrProto);
+        return rule.set(objectOrProto, key, assignment(value, key, this), this);
       }
     });
   }

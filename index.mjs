@@ -1,3 +1,7 @@
+// These top ones are for debugging. Not part of API (yet).
+export { RuleStack } from './ruleStack.mjs';
+export { BaseRule } from './baseRule.mjs';
+
 import { Proxied } from './proxied.mjs';
 import { Computed } from './computed.mjs';
 import { Eager } from './eager.mjs';
@@ -5,9 +9,9 @@ export const Rule = Computed;
 
 Rule.Eager = Eager;
 
-function rulifiablePropertyName(key) { // We don't want to rulify array methods
+function rulifiableArrayPropertyName(key) { // We don't want to rulify array methods
   let keyString = key.toString();
-  if (keyString === 'length') return keyString;
+  if (keyString === 'length') return Proxied.lengthRuleKey; 
   if (/^[0-9]+$/.test(keyString)) return keyString; // integer keys are good
   // Everything else, we'll want to use the property (typically a method) in object.
   return false;
@@ -19,7 +23,7 @@ Rule.rulify = function rulify(object, {
   asArray = Array.isArray(object),
   ruleClass = asArray ? Proxied : Rule,
   ruleNames = asArray ?
-    [rulifiablePropertyName] :
+    [rulifiableArrayPropertyName] :
     Object.getOwnPropertyNames(object).filter(function (prop) { return 'constructor' !== prop; }),
   eagerNames = [],
   ...configuration // Might include, e.g., configurable, assignment, ...  See Property.attach().

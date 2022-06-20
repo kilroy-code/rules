@@ -12,9 +12,27 @@ var fixmeDebug = false;
 export function debug(x) { fixmeDebug = x; }
 var oneShotArmed = true;
 
+// A horrible hook for injecting a new base class and construction mechanism.
+// define window.baseRuleClass before import.
+const BaseClass = ((typeof window !== 'undefined') && window.baseRuleClass) ?
+      window.baseRuleClass :
+      class BaseRuleClass {
+	constructor(properties) {
+	  this.init(properties);
+	}
+	init() {
+	}
+	static create(properties) { // A hook so we can do it different ways.
+	  return new this(properties);
+	}
+      };
+
+console.log({window, baseRuleClass: window.baseRuleClass, BaseClass});
+
 // An abstract rule that only only supports get/set/reset, and printing.
-export class BaseRule {
-  constructor({instance, key, instanceLabel}) { // instance must be the specific instance, not the __proto__.
+export class BaseRule extends BaseClass {
+  init({instance, key, instanceLabel}) { // instance must be the specific instance, not the __proto__.
+    super.init();
     this.instance = instance;
     this.key = key;
     this.collectingReferences = [];
@@ -37,6 +55,12 @@ export class BaseRule {
     this._setInternal(...arguments);
     return true; // To be compatible with Reflect.set and Proxy handler.set, must answer a success boolean.
   }
+  // Subclasses must define the actual methods:
+  // retrieveValue(target, property, receiver=target) { }
+  // storeValue(target, property, value, receiver=target) { }
+  _setInternal() {
+    this.storeValue(...arguments);
+  }
   reset() {
     if (fixmeDebug) {
       try {
@@ -50,14 +74,7 @@ export class BaseRule {
         console.log('reset', this, e);
       }
     }
-    // Same code as set(), but not going through that method, which can redefined for application-specific assignments.
+    // Same code as set(), but not going through that method, which can be redefined for application-specific assignments.
     this._setInternal(this.instance, this.key, undefined);
   }
-
-  _setInternal() {
-    this.storeValue(...arguments);
-  }
-  // Subclasses must define the actual methods:
-  // retrieveValue(target, property, receiver=target) { }
-  // storeValue(target, property, value, receiver=target) { }
 }

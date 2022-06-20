@@ -13,24 +13,9 @@ import { Promisable } from './promisable.mjs';
 
 // A Rule that calls a method to compute a value when there is nothing cached (and then it caches the result).
 export class Computed extends Property {
-  constructor(props) {
-    super(props);
+  init(props) {
+    super.init(props);
     this.methodKey = props.methodKey;
-  }
-  // FIXME: This is an optimized version that basically expands calls inline. Why doesn't the compiler do this for us?
-  get(target, property, receiver = this.instance) {
-    let value = this.cached; // expand retrieveValue
-    if (undefined === value) {
-      value = this.compute(receiver);
-      // expand storeValue
-      this.cached = value;
-      if (value instanceof Promise) this.setupPromiseResolution(target, property, value, receiver);
-    }
-    // expand trackRule:
-    if (value === undefined) throw new Error(`No Rule value returned for ${this}.`); // Property rule
-    if (!RuleStack.current.trackRule(this)) return value; // Tracked rule
-    if (value instanceof Promise) throw this; // Promisable rule
-    return value;
   }
   retrieveValue(target, property, receiver = this.instance) {
     let value = super.retrieveValue(target, property, receiver);
