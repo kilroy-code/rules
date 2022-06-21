@@ -27,8 +27,6 @@ const BaseClass = ((typeof window !== 'undefined') && window.baseRuleClass) ?
 	}
       };
 
-console.log({window, baseRuleClass: window.baseRuleClass, BaseClass});
-
 // An abstract rule that only only supports get/set/reset, and printing.
 export class BaseRule extends BaseClass {
   init({instance, key, instanceLabel}) { // instance must be the specific instance, not the __proto__.
