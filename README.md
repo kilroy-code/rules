@@ -1,45 +1,68 @@
 # Rules
 
-Rules are a way to define Javascript code that computes a value, but which behaves like properties. However, the code automatically keeps track of what rules (i.e., what properties) depend on others, so that when something changes, the system automatically recomputes all and only those rules that need to be recomputed.
+Rules keep track of each other, and update all and only those other Rules that need to be updated when something changes.
 
-The cells in a spreadsheet work this way. You can write a value to a cell, and that value is remmbered by the spreadsheet and displayed. You can also write a formula that is used to compute the value of a cell, and that formula may use the value of other cells, whether those cells have supplied values or are forumalae themselves. When you change one of those supplied values, all of the forumalae that depend on it are recomputed, and all of the formulae that depend on _those_, and so on.
+The cells in a spreadsheet work this way. You can write a value to a cell, and that value is remembered by the spreadsheet and displayed. Or you can write a formula that is used to compute the value of a cell, and that formula may use the value of other cells. When you change one of those referenced values, all of the formulae that depend on it are recomputed, and all of the formulae that depend on _those_, and so on.
 
 Rules are exactly the same thing, but can be used in any Javascript program. A Rule is like a cell in a spreadsheet, and the code in the Rule is like the formula.
 
 This style of programming is particularly useful for complex systems, or where different parts of the system are authored by different people or organizations. 
 
-## Example
+This README includes:
+
+- A gentle [Introduction](#introduction)
+- A broad description of the [Implementation](#implementation)
+- Background on [Related Work](#related-work)
+- The [API](#api)
+
+## Introduction
+### Example
 
 There are many ways to define Rules. One way is with ordinary classes:
 
 ```
 class Box {
-  length() {  // The simplest rule just returns a value.
+  get length() {  // The simplest rule just returns a value.
     return 2;
   }
-  width() {
+  get width() {
     return 3;
   }
-  area() {
+  get area() {
     return this.length * this.width; // A formula that depends on other Rules.
   }
 }
-Rule.rulify(Box.prototype);  // Converts the methods to Rules.
+Rule.rulify(Box.prototype);  // Converts the "get" methods to Rules.
 
 var box = new Box();
 console.log(box.length); // 2
 console.log(box.width);  // 3
 console.log(box.area);   // 6
 ```
-Note that _length_ and _width_ are **accessed** as ordinary properties, rather than as method calls. 
+Note that _length_ and _width_ are **accessed** as ordinary properties, rather than as method calls. So far, this is just like an ordinary Javascript "getter".
 
-The values can also be **assigned** as ordinary properties:
+We did not define any "setter" methods, but `rulify` automatically creates them. The Rule values can therefore be **assigned** as ordinary properties:
 
 ```
-box.length = 5;
+box.length = 5;         // The "set" method was automatically generated.
 console.log(box.area);  // 15! 
 ```
-We did not have to tell _area_ that it needed to be recomputed now that _length_ was changed. The next sections describe some of them.
+We did not have to tell _area_ that it needed to be recomputed now that _length_ was changed. 
+
+Rules are:
+
+- properties
+- cached / memoized
+- demand-driven / lazy
+- dependency-directed backtracked
+- tracked dynamically
+- compatible with components and `=>` functions
+- dynamcially attachable
+- applicable to POJOs
+- applicable to Arrays
+- transparently supportive of `async` and `Promise`
+
+Each of these are described in the following sections.
 
 ### Properties
 
@@ -56,7 +79,7 @@ Reflect.set(someObject, 'answer', 99);
 console.log(Reflect.get(someObject, 'answer')); // 99
 
 someObject.answer = undefined;
-console.log(someObject.answer); // undefined
+console.log(someObject.answer); // undefined for ordinary properties
 ```
 
 Rules are the same, except for the last line above. A Rule would recompute the _answer_ based on the formula code in the Rule.
@@ -73,7 +96,7 @@ The values of all rules are automatically cached.  For example, suppose we had d
 
 ```
 ...
-  area() {
+  get area() {
     console.log('Computing area!');
     return this.length * this.width;
   }
@@ -84,46 +107,54 @@ Computing area!
 6
 > box.area // We already cached the value. No need to recompute.
 6 
+```
 
-> box.length = 5;
+Memoization is often used in applications for efficiency. While that doesn't seem very important in this toy example, it makes a big difference in complex applications in which it is not obvious when one computation will involve another, which involves another written by someone else, where that computation turns out to be expensive. Here, all Rules are memoized. (You can still use ordinary methods that are not Rules, and thus not memoized.)
+
+### Demand-Driven Evaluation (aka Lazy Evaluation)
+
+In the above examples, _area_ is not computed until it is actually used, i.e., referenced by some executing code. Now consider a change that resets _area_:
+
+```
+...
+> box.area // area has been computed and the result cached
+6
+...
+
+> box.length = 5;  // Resets area, but does not yet recompute it.
 5
-> box.area // Area needs to be recomputed.
+> box.area // Area needs to be recomputed in order to get the new value.
 Computing Area
 15 
 > box.area // And now the new value has been cached. No recompute.
 15
 ```
+Even after we computed _area_ once, by default it is not immediately recomputed when we assign a new value for _length_. However, once we then asked for _area_ it was computed again and the value cached.
 
-Memoization is often used in applications for efficiency. While that doesn't seem very important in this toy example, it makes a big difference in complex applications in which it is not obvious when one computation will involve another, which involves another written by someone else, where that computation turns out to be expensive. Here, all Rules are memoized. 
-
-Memoization is the default behavior. You can still have ordinary methods that are not cached. See `rulify` and `attach`.
-
-### Demand-Driven Evaluation (aka Lazy Evaluation)
-
-In the above examples, _area_ is not computed until it is actually used, i.e., referenced by some executing code. Even after we computed _area_ once, by default it was not immediately recomputed when we assigned a new value for _length_. However, once we then asked for _area_ it was computed again and the value cached.
-
-Imagine that you have a spreadsheet with some big table way out to the side offscreen, or on another sheet. Lazy evaluation means that these forumalas are not actually computed until they come into view -- unless something that _is_ in view depends on those other cells, in which case they _are_ automatically computed insead of giving an error. In any case, as a spreadsheet author you don't have to write any code to compute the other cells when they come into view, or to make sure that some part of it is computed when off screen because you need the answer in this other cell that is in view.
+Imagine that you have a spreadsheet with some big table way out to the side offscreen, or on another sheet. Lazy evaluation means that these forumalae are not actually computed until they come into view -- unless something that _is_ in view depends on those other cells, in which case they _are_ automatically computed instead of giving an error. In any case, as a spreadsheet author you don't have to write any code to compute the other cells when they come into view, nor do you need to make sure that some part of it is computed when off screen because you need the answer in this other cell that is in view.
 
 Lazy evaluation is the default behavior. You can also have "eager" Rules that automatically get re-demanded after they have been reset. See `rulify` and `attach`.
 
 ### Dependency-Directed Backtracking
 
+What we have seen so far could be produced by fairly ordinary use of the `get` and `set` decorations of class defintions. (There's a partial example in [MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/get#smart_self-overwriting_lazy_getters).) The real reason for Rules, however, is to be able to automatically update when needed, like a spreadsheet.
+
 As the system computes the Rule for our _area_, above, it keeps track of the other Rules that it needs -- in this case, _length_ and _width_. It automatically uses the cached values of those Rules, and it automatically computes them if they have not yet been demanded. This is automatically repeated for all of the Rules that _they_ require, and so forth.
 
-Now, when something is assigned, such _length_, above, the system goes back and resets all those Rules that have been demanded that immediately depend on _length_ for their own formula. This is automatically repeated for all of the Rules that depend on _those_ Rules, and so forth. 
+Now, when something is assigned, such as _length_, above, the system goes back and resets all those Rules that have been demanded that immediately depend on _length_ for their own formula. This is automatically repeated for all of the Rules that depend on _those_ Rules, and so forth. 
 
-Note that _only_ the dependent rules are reset. For example, _width_ is not reset, because its code doesn't depend at all on _length_. This is very different than a system that simply notes whether "something has changed", and then recomputes _everything_.
+Note that _only_ the dependent rules are reset. For example, _width_ is not reset when _length_ is assigned, because _width_'s code doesn't depend at all on _length_. This is very different than a system that simply notes whether "anything at all has changed", and then recomputes _everything_.
 
 (If you're familiar with expert systems, you can think of the demand-driven evaluation of referenced Rules as "forward chaining", and the reset of all the dependent Rules as "backward chaining". Rules use both!)
 
 ### Tracking Through Dynamic Extent
 
-A Rule can refer to non-Rule code that, in turn, refers to a Rule. That's fine, and the second Rule _will_ be tracked. There is no need for the first Rule to lexically contain the second Rule. (However, see "Pitfalls", below.)
+A Rule can refer to non-Rule code that, in turn, refers to a Rule. That's fine, and the second Rule _will_ be tracked. There is no need for the first Rule to lexically contain the second Rule. (However, see [Pitfalls](#pitfalls-and-common-mistakes), below.)
 
-If it helps to understand, the tracking is achieved by having Rule reference interact with an application-global stack of tracking machinery. This works because of two fundamental of how Javascript works:
+If it helps to understand, the tracking is achieved by having Rule reference interact with an application-global stack of tracking machinery. This works because of two fundamentals of how Javascript works:
 
-- Each Javascript application module is effectively single-threaded for the application code. Rules are _not_ tracked between, e.g., one Web page and another, or between a Web page and a Web worker.
-- Javascript modules (such as the Rules module) are only loaded once in application code, regardless of how many modules may load other modules that each load the Rules module.
+- Each Javascript application module is effectively single-threaded for the application code. Rules are _not_ tracked between one Web page and another, or between a Web page and a Web worker.
+- Javascript modules (such as the Rules module) are only loaded once in application code, regardless of how many modules may load other modules that each load the Rules module. So there are no duplicates of the internal tracking machinery.
 
 ### Components and `this`
 
@@ -131,21 +162,21 @@ One sometimes wants to define object instances of, e.g., a generic "game object"
 
 There are several mechanisms in Javascript that allow for such distinctions, including `function` and `bind` vs `=>`, and _target_ vs _receiver_ in `Reflect.get`/`.set`.
 
-To accomodate such distinctions, the code for computing a Rule value is always passed an argument that is the _receiver_.  Usually this is the same as `this`, but can be different (e.g., in `Reflect.get`). You can ignore this argument (e.g., you don't even have to declare it, but it's there if you want. (For example, I often name that argument `self` and use it where I would otherwise use `this`.) This is particularly convenient with "Dynamic Attachement" and `=>` functions.
+To accomodate such distinctions, the code for computing a Rule value is always passed an argument that is the _receiver_.  Usually this is the same as `this`, but can be different (e.g., in `Reflect.get`). You can ignore this argument (e.g., you don't even have to declare it in your forumala code, but it's there if you want. (For example, I often name that argument `self` and use it where I would otherwise use `this`.) This is particularly convenient with "Dynamic Attachment" and `=>` functions.
 
 _(FIXME: give an example that shows where they can be different.)_
 
 
 ### Dynamic Attachment
 
-An ordinary property can be created simply by assigning a value, or by using `Object.defineProperty()`.  They don't have to be declared up front by a class definition. It is very common to make use of this Javascript, especially when creating things live while interacting with them.
+An ordinary property can be created simply by assigning a value, or by using `Object.defineProperty()`.  They don't have to be declared up front by a class definition. It is very common to make use of this in Javascript, especially when creating things live while interacting with them.
 
 We can also dynamically attach Rules to existing instantiated objects:
 
 ```
 Rule.attach(parent, 'reversedNames', (self) => self.children.reverse)
 ```
-This defines a new Rule on parent (or redefines an old one of the same name), accessed as `parent.reversedNames`. The default function provides the default computed value.
+This defines a new Rule on parent (or redefines an old one of the same name), accessed as `parent.reversedNames`. The function provides the default computed value.
 
 _(FIXME: add redefinition to test suite.)_
 
@@ -153,13 +184,14 @@ _(FIXME: add redefinition to test suite.)_
 
 There's nothing particularly magical about class instances in Javascript. Our box in the example above could be an ordinary "Plain Old Javascript Object" (e.g., `{}`, or `{x: 17, y: 42, name: 'fred'}`), plus some inheritance.
 
-You can `attach` to a POJO, and you can `rulify` any instance, whether a POJO or something else.  For example, our _box_ could be written as:
+You can `attach` or 'rulify' a POJO.  For example, our _box_ could be written as:
 
 ```
 var box = {};
 Rule.attach(box, 'length', () => 2);
 Rule.attach(box, 'width', () => 3);
 Rule.attach(box, 'area', (self) => self.length * self.width);
+
 console.log(box.area);   // 6
 ...
 ```
@@ -173,6 +205,7 @@ var box = {
   area: (self) => self.length * self.width
 };
 Rule.rulify(box);
+
 console.log(box.area);   // 6
 ...
 ```
@@ -191,22 +224,22 @@ class Child {
   constructor(name) {
     this.name = name;  // Overrides the default Rule for name.
   }
-  name() {
-    return 'name me';
+  get name() {
+    return 'Name me!';
   }
 }
 
 class Parent {
-  childA() {
+  get childA() {
     return new Child('A');
   }
-  childB() {
+  get childB() {
     return new Child('B');
   }
-  children() {
+  get children() {
     return [this.childA, this.childB];
   }
-  names() {
+  get names() {
     return this.children.map((child) => child.name).join(', ');
   }
 }
@@ -214,13 +247,15 @@ class Parent {
 
 var parent = new Parent();
 console.log(parent.names);  // A, B 
+
 parent.childA.name = 'C';
 console.log(parent.names);  // C, B
+
 parent.childB = new Child('D');
 console.log(parent.names);  // C, D
 ```
 
-The Rules _names_ depends on _children_. In turn, the Rule _children_ depends on _childA_ and _childB_. Finally, _names_ also depends on the _name_ Rule of each _Child_.  So naturally, when we assign new values to `parent.childA.name` or `parent.childB`, _names_ is recomputed.
+The Rule _names_ depends on _children_. In turn, the Rule _children_ depends on _childA_ and _childB_. Finally, _names_ also depends on the _name_ Rule of each child instance.  So naturally, when we assign new values to `parent.childA.name` or `parent.childB`, _names_ is recomputed.
 
 All these references to Rules in other objects are perfectly fine and expected.
 
@@ -228,7 +263,7 @@ However, the Array that is the value of _children_ also has properties, but they
 
 ```
 parent.children.push(new Child('E'));
-console.log(parent.names);  // C, D still!!!
+console.log(parent.names);  // C, D still! It does not include E!
 ```
 
 The Rules _names_ and _children_ cannot depend on the array _length_, and so _names_ does not get reset when _length_ is changed!
@@ -236,7 +271,7 @@ The Rules _names_ and _children_ cannot depend on the array _length_, and so _na
 Fortunately, we can _rulify_ arrays just like we can rullify POJOs:
 
 ```
-  children() {
+  get children() {
     return Rule.rulify([this.childA, this.childB]);
   }
 
@@ -258,10 +293,10 @@ async function saveDataAndReturnIdentifier() {
 
 class Widget {
   ...
-  identifier() {
+  get identifier() {
     return saveDataAndReturnIdentifier();
   }
-  childIdentifiers() {
+  get childIdentifiers() {
     return this.children.map(child => child.identifier));
   }
   ...
@@ -270,18 +305,21 @@ Rule.rulify(Widget.prototype);
 ```
 Note that none of the Rule code does anything at all with `async` or `await`. It does not need to. An application that uses this, e.g., to display an inspector of _Widgets_, could show Promise values as `...`, and then show the resolved value. But neither the author of the UI, nor the author of the _Widget_ Rules, needs to know anything about the internals of which Widget rules might temporarily be a `Promise` vs which do not.
 
-This is very convenient, especially when working with code produced by other with which you are not familiar or which may be changing -- including code that is changing as you use it! But there is an important reason for it beyond convenience. In some systems, particularly distributed systems, it is very important that the system (or some well-defined portion of the system) produce deterministically identical results on different computers. This is difficult when some result involve user interactions and communications over the network (that may take different amounts of time for different users). When combined with memoization, above, the magic resolution of `Promises` makes it possible to know that once a Rule has an answer on each system, it will be the same answer on each system regardless of how long things took, or what order the dependents were computed in. (This is assuming that the Rules do not depend on side effects, such as incrementing a set of order-dependent counters.)
+This is very convenient, especially when working with code produced by others with which you are not familiar or which may be changing -- including code that is changing as you use it! But there is an important reason for it beyond convenience. In some systems, particularly distributed systems, it is very important that the system (or some well-defined portion of the system) produce deterministically identical results on different computers. This is difficult when some results involve user interactions and communications over the network (which may take different amounts of time for different users). When combined with memoization, above, the magic resolution of `Promises` makes it practical to write a system in which a Rules resolved value is the same on each system regardless of how long things took, or what order the dependents were computed in. (This is assuming that the Rules do not depend on side effects, such as incrementing a set of order-dependent counters, or providing different asynchronous networked answers for different users.)
 
 ## Pitfalls and Common Mistakes
 
-- Non-Rule code can refer to Rules (using ordinary property syntax), but it won't get the magic Promise resolution. For example, if non-Rule code references a Rule that happens to be a Promise at the time, the non-Rule will have to arrange its own `await` or `then`.
+- Non-Rule code can refer to Rules (using ordinary property syntax), but:
+
+ - The non-Rule code won't magically update when there is an update to the Rules it references.
+ - It won't get the magic Promise resolution. For example, if non-Rule code references a Rule that happens to be a Promise at the time, the non-Rule will have to arrange its own `await` or `then`.
 
 - Rule code can refer to non-Rule code, including non-Rule properties, but it won't  track changes (e.g., assignments) to non-Rule properties.
 
 - A single Rule can have code that refers to _multiple_ other Rules that are `async` or have `Promise` values. That works. However, portions of the Rule may execute multiple times. For example, suppose there is a Rule like:
 
 ```
-computeSomething() {
+get computeSomething() {
   const fooResult = this.foo;
   console.log('Got resolved foo:', fooResult);
   const barResult = this.bar;
@@ -303,13 +341,13 @@ Got resolved baz: 99
 ```
 Note, though, that because of memoization, this code will not not execute whatever is in _foo_ more than once, nor will it execute whatever is in _bar_ more than once. It is just that the portions of _computeSomething_ that _reference_ _foo_ and _bar_ may be executed more than once.
 
-- During the initial dynamic execution of a Rule, all the other Rules it requires are tracked. However, this does not apply to a callback that lexically appears within a Rule, nor to a `then` (because this is equivalent to a callback). For example:
+- During the initial dynamic execution of a Rule, all the other Rules it requires are tracked. However, this does not apply to a _callback_ that lexically appears within a Rule, nor to a `then` (because this is equivalent to a callback). For example:
 
 ```
 class Callbacks {
-  a() { return 1; }
-  b() { return 2; }
-  data() {
+  get a() { return 1; }
+  get b() { return 2; }
+  get data() {
     let data = [];
     let a = data[0] = self.a;
     fetchFromDatabase(a, function (error, dbValue) {
@@ -317,16 +355,16 @@ class Callbacks {
       let b = data[1] = this.b;
       data[2] = dbValue + a + b;
     });
-  return container;
+  return data;
 }
 Rule.rulify(Callbacks.prototype);
 ```
-If there is an assignment (including a reset) of _a_, then _data_ will correctly be recomputed because a was referenced dynamically before / lexically outside of the callback. However, the Rule _b_ will not be tracked as being required for _data_, and an assignment or reset of _b_ will not recompute the _data_.
+If there is an assignment (including a reset) of _a_, then _data_ will correctly be recomputed because a was referenced dynamically within the Rule formula execution, where data is return. However, the callback happens later, while Rules are not being tracked. The Rule _b_ will therefore not be tracked as being required for _data_, and an assignment or reset of _b_ will not recompute the _data_.
 
 The correct way to do this is to split the database operation into two Rules, one that returns a Promise indicating that the database operation has been started, and one that does something with the results:
 
 ```
- dbValue(self) {
+ get dbValue() {
    return new Promise(function (resolve, reject) {
      fetchFromDatabase(self.a, function (error, dbValue) {
        if (error) reject(error);
@@ -334,27 +372,43 @@ The correct way to do this is to split the database operation into two Rules, on
      });
    });
  }
- computationOnDbValue(self) {
-   return self.dbValue + self.a + self.b;
+ get computationOnDbValue() {
+   return this.dbValue + this.a + this.b;
  }
 ```
-This wil re-rerun the database fetch if _a_ changes, and it will recompute the final answer if _a_ or _b_ changes.
+This wil re-rerun the database fetch if _a_ changes, and it will recompute the _computationOnDbValue_ if _a_ or _b_ changes (automatically waiting on _dbValue_ to resolve if/as necessary).
 
 - Beware of side-effects. In general, functional/declarative and procedural code can be mixed with Rules, but if you do that, it is up to you to ensure that the side effects are correct.
 
-- A particular case of the general warning about side-effects, is that if you do some network or other activity asynchronously, beware of assignments the result before it has resolved. For example, if you have a Rule that returns a `Promise` and then make an assignment to it before the `Promise` resolves, the final value of the Rule is not specified. 
+- A particular case of the general warning about side-effects, is that if you do some network or other activity asynchronously, beware of assignments to the result before it has resolved. For example, if you have a Rule that returns a `Promise` and then make an assignment to it before the `Promise` resolves, the final value of the Rule is not specified. 
+
+## Implementation
+
+_(FIXME: give an overview of how it is implemented: rules and get/set, defineProperty or Proxy, and rule stack)_
+
+### Performance
+
+This kind of system is usually used in cases where it simply would not be possible to write the system without it, never mind run it. In such cases, we're generally happy if it runs within an order of magnitude of hand-crafted "normal" code.
+
+The overall performance is highly dependent on the particular application. For example, suppose that an application depends on maintaining a core set of Rules of modest scale -- say a few hundred or a thousand Rules. There might be 10,000 or more Rules that these depend on. If rendering the application ultimately only has to look only at the core set, and most are cached with only a few updating, then the 10k Rules behind it are not examined at all during a typical rendering frame. In such cases, the caching alone may make a Rule-based application more performant, even if examination of a value is relatively slow.
+
+As it happens, reading a cached value in the current implementation is well within an order of magnitude of an ordinary method call. On Chrome or Edge, it appears to currently be a factor of 2 or 3 slower. 
+
+Computing a Rule appears to be about 20-30 times slower.
+
+A detailed profiling would, no doubt, take this down further.
 
 ## Related Work
 
 Depedency-directed backtracking has been used for decades in artifical intelligence and expert systems.
 
-The authors own experience with it began while working for several years at an expert systems company that did CAD systems for engineers. (This company spawned an IPO, several spinnoffs, and acquisitions by Oracle, Autodesk, and Dassault.) See https://en.wikipedia.org/wiki/ICAD_(software)
+The present author's own experience with it began while working for several years at a Knowledge-Based Engineering tools company that produced CAD systems for engineers. (This company spawned an IPO, several spinnoffs, and acquisitions by Oracle, Autodesk, and Dassault.) See [https://en.wikipedia.org/wiki/ICAD_(software)](https://en.wikipedia.org/wiki/ICAD_(software))
 
-Later, he led a team that created a version of Croquet that used it. See https://https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf and https://alum.mit.edu/www/stearnscroquet/C5-06-BrieArchitecture.pdf
+Later, he led a team that created a version of Croquet that used this technique. See [https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf](https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf)) and [https://alum.mit.edu/www/stearns/croquet/C5-06-BrieArchitecture.pdf](https://alum.mit.edu/www/stearns/croquet/C5-06-BrieArchitecture.pdf). This Javascript package is an outgrowth of that work.
 
 ## API
 
-### ES6 Modules CommonJS Modules
+### ES6 Modules
 
 _(FIXME: exampes of setup for each, and define what is exported)_
 

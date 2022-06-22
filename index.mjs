@@ -17,22 +17,39 @@ function rulifiableArrayPropertyName(key) { // We don't want to rulify array met
   return false;
 }
 
+function getterPropertyData(objectOrPrototype) {
+  return Object.entries(Object.getOwnPropertyDescriptors(objectOrPrototype)).filter(([key, descriptor]) => descriptor.get && !descriptor.set);
+}
+function allRulablePropertyNames(objectOrPrototype) {
+  return Object.getOwnPropertyNames(objectOrPrototype).filter(function (prop) { return 'constructor' !== prop; });
+}
+function defaultPropertyRuleNames(objectOrPrototype) {
+  let getterData = getterPropertyData(objectOrPrototype);
+  if (getterData.length) return getterData;
+  return allRulablePropertyNames(objectOrPrototype);
+}
+
 // Convert an entire instance or prototype, or list to Rules.
 // FIXME: let's either call this create or from, or just make it the constructor. (Make a new package version.)
 Rule.rulify = function rulify(object, {
   asArray = Array.isArray(object),
   ruleClass = asArray ? Proxied : Rule,
-  ruleNames = asArray ?
-    [rulifiableArrayPropertyName] :
-    Object.getOwnPropertyNames(object).filter(function (prop) { return 'constructor' !== prop; }),
+  ruleNames = asArray ? [rulifiableArrayPropertyName] : defaultPropertyRuleNames(object),
   eagerNames = [],
   ...configuration // Might include, e.g., configurable, assignment, ...  See Property.attach().
 } = {}) {
-  let result = object;
+  let result = object; // In case attach produces a proxy.
   ruleNames.forEach(function (key) {
+    let formula;
+    if (Array.isArray(key)) {
+      formula = key[1].get;
+      key = key[0];
+    } else {
+      formula = object[key];
+    }
     let isEager = eagerNames.includes(key);
     let klass = isEager ? Eager : ruleClass; // fixme
-    result = klass.attach(object, key, object[key], configuration);
+    result = klass.attach(result, key, formula, configuration);
   });
   return result;
 }
