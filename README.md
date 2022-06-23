@@ -11,9 +11,10 @@ This style of programming is particularly useful for complex systems, or where d
 This README includes:
 
 - A gentle [Introduction](#introduction)
+- The [API](#api)
+- [Pitfalls](#pitfalls-and-common-mistakes) and Common Mistakes
 - A broad description of the [Implementation](#implementation)
 - Background on [Related Work](#related-work)
-- The [API](#api)
 
 ## Introduction
 ### Example
@@ -51,16 +52,16 @@ We did not have to tell _area_ that it needed to be recomputed now that _length_
 
 Rules are:
 
-- properties
-- cached / memoized
-- demand-driven / lazy
-- dependency-directed backtracked
-- tracked dynamically
-- compatible with components and `=>` functions
-- dynamcially attachable
-- applicable to POJOs
-- applicable to Arrays
-- transparently supportive of `async` and `Promise`
+- [properties](#properties)
+- [cached](@caching-aka-memoization) / memoized
+- [demand-driven](#demand-driven-evaluation-aka-lazy-evaluation) / lazy
+- dependency-directed [backtracked](#dependency-directed-backtracking)
+- [tracked dynamically](#tracking-through-dynamic-xtent)
+- compatible with [components and `=>` functions](#components-and-this)
+- [dynamcially attachable](#dynamic-attachment)
+- applicable to [POJOs](#pojos)
+- applicable to [Arrays](#arrays)
+- transparently supportive of [`async` and `Promise`](#promises-and-async-rules)
 
 Each of these are described in the following sections.
 
@@ -70,16 +71,16 @@ In basic Javascript, you can read a named property of an object (or a numbered p
 
 ```
 someObject.answer = 17;
-console.log(someObject.answer); // 17
+console.log(  someObject.answer  ); // 17
 
 someObject['answer'] = 42;
-console.log(someObject['answer']); // 42
+console.log(  someObject['answer']  ); // 42
 
 Reflect.set(someObject, 'answer', 99);
-console.log(Reflect.get(someObject, 'answer')); // 99
+console.log(  Reflect.get(someObject, 'answer')  ); // 99
 
 someObject.answer = undefined;
-console.log(someObject.answer); // undefined for ordinary properties
+console.log(  someObject.answer  ); // undefined for ordinary properties
 ```
 
 Rules are the same, except for the last line above. A Rule would recompute the _answer_ based on the formula code in the Rule.
@@ -133,7 +134,9 @@ Even after we computed _area_ once, by default it is not immediately recomputed 
 
 Imagine that you have a spreadsheet with some big table way out to the side offscreen, or on another sheet. Lazy evaluation means that these forumalae are not actually computed until they come into view -- unless something that _is_ in view depends on those other cells, in which case they _are_ automatically computed instead of giving an error. In any case, as a spreadsheet author you don't have to write any code to compute the other cells when they come into view, nor do you need to make sure that some part of it is computed when off screen because you need the answer in this other cell that is in view.
 
-Lazy evaluation is the default behavior. You can also have "eager" Rules that automatically get re-demanded after they have been reset. See `rulify` and `attach`.
+Demand-driven evaluation is more than just an optimization. It is necessary for "turtles all the way down" systems, in which objects have behaviors that are themslves objects that have behaviors. It is fine for such objects to show their behavior objects when inspected by the user. But the system cannot cause them all to come into being when defined, because the initialization would never terminate.
+
+Lazy evaluation is the default behavior. You can also have "eager" Rules that automatically get re-demanded after they have been reset. See `rulify` and `attach`. Note that even an eager rule does not cause itself to exist as soon as it is defined (e.g., on a prototype) - it still needs to be explicitly demanded that first time by the application.
 
 ### Dependency-Directed Backtracking
 
@@ -278,13 +281,13 @@ Fortunately, we can _rulify_ arrays just like we can rullify POJOs:
 ```
 This converts length and each element of the array to a Rule, in which changes are tracked by other Rules. Now `parent.names` is properly updated to `C, D, E`.
 
-_I am concering additional magic. In particular, there are several methods on Array.prototype that use a function to create a new copied array. I would like for each of these methods on rulified arrays to automatically produce a new rulified array in which the formula for each element is based on the function given by the application. Thus if an individual element of the original rulified array is changed, then the corresponding element of the copy - and only that element - will be reset. Demanding that element will compute a new value by applying the original formula to the new element of the original rulified array. The motivation for this is that I would like to be able to replace a child element and have various mirrors or views of those children update only one element. This matters when the tree is deep and something near the top is replaced (e.g., with new code)._
+_I am considering additional magic. In particular, there are several methods on Array.prototype that use a function to create a new copied array. I would like for each of these methods on rulified arrays to automatically produce a new rulified array in which the formula for each element is based on the function given by the application. Thus if an individual element of the original rulified array is changed, then the corresponding element of the copy - and only that element - will be reset. Demanding that element will compute a new value by applying the original formula to the new element of the original rulified array. The motivation for this is that I would like to be able to replace a child element and have various mirrors or views of those children update only one element. This matters when the tree is deep and something near the top is replaced (e.g., with new code)._
 
 ### Promises and `async` Rules
 
 A Rule can be declared `async` or it can explicitly return a `Promise`. This is quite common when interacting with the file system or another computer on the network. In either case, a reference to the Rule will answer a Promise until it is resolved, and then will _automatically replace the Promise with the resolved value_. (How cool is that!)
 
-Furthermore, this fans out to any Rule that depends on a Rule with a `Promise` value. The referencing rule does not need to know whether the Rule it depends on was asynchronous, and it does not need to explicity `await` the result!  E.g.,:
+Furthermore, this fans out to any Rule that depends on a Rule with a `Promise` value. The referencing rule does not need to know whether the Rule it depends on was asynchronous, and it does not need to explicity `await` the result!
 
 ```
 async function saveDataAndReturnIdentifier() {
@@ -307,7 +310,41 @@ Note that none of the Rule code does anything at all with `async` or `await`. It
 
 This is very convenient, especially when working with code produced by others with which you are not familiar or which may be changing -- including code that is changing as you use it! But there is an important reason for it beyond convenience. In some systems, particularly distributed systems, it is very important that the system (or some well-defined portion of the system) produce deterministically identical results on different computers. This is difficult when some results involve user interactions and communications over the network (which may take different amounts of time for different users). When combined with memoization, above, the magic resolution of `Promises` makes it practical to write a system in which a Rules resolved value is the same on each system regardless of how long things took, or what order the dependents were computed in. (This is assuming that the Rules do not depend on side effects, such as incrementing a set of order-dependent counters, or providing different asynchronous networked answers for different users.)
 
+## API
+
+### ES6 Modules
+
+```
+import { Rule } from '@kilroy-code/rules/index.mjs';
+```
+
+### attach
+
+`Rule.attach(objectOrProto, propertyName, methodOrInit, {configurable, enumerable})`
+
+Defines `objectOrProto[propertyName]` as a Rule in which `methodOrInit` is the forumala (if `methodOrInit` is a function), or the initial cached value (otherwise).
+
+`configurable` and `enumerable` are as for `Object.defineProperty()`.
+
+`Rule.Eager.attach` is the same, but creates an eager rule.
+
+### rulify
+
+`Rule.rulify(object, {ruleNames, eagerNames, configurable, enumerable})`
+
+Creates a rule on `object` for each property named in `ruleNames`.  `configurable` and `enumerable` are as for `Object.defineProperty()`. See [attach](#attach), above. If a name appears in (`ruleNames` and) `eagerNames`, the rule will be eager.
+
+`ruleNames` defaults to a list of each own-property in `object` that is defined with `get` and no `set`. (Currently, if the list is empty, it is populated by every single own-property in `object` except `constructor`. However, this behavior might be dropped in future versions.)
+
+`Rule.rulify(array)`
+
+Return an Array (actually, a Proxy to an Array) in which each element, and the length property, are Rules. The initial values of each are the elements of `array`.  See [Arrays](#arrays), above.
+
+It is not specified whether changes to the returned value will effect the original `array`. (Currently, they do.)
+
 ## Pitfalls and Common Mistakes
+
+### Tracking
 
 - Non-Rule code can refer to Rules (using ordinary property syntax), but:
 
@@ -316,30 +353,29 @@ This is very convenient, especially when working with code produced by others wi
 
 - Rule code can refer to non-Rule code, including non-Rule properties, but it won't  track changes (e.g., assignments) to non-Rule properties.
 
-- A single Rule can have code that refers to _multiple_ other Rules that are `async` or have `Promise` values. That works. However, portions of the Rule may execute multiple times. For example, suppose there is a Rule like:
+- You can write circularly referential Rules, but of course, you must assign/override enough of them so that they are not actually circular.
 
 ```
-get computeSomething() {
-  const fooResult = this.foo;
-  console.log('Got resolved foo:', fooResult);
-  const barResult = this.bar;
-  console.log('Got resolved bar:', barResult);
-  const bazResult = this.baz;
-  console.log('Got resolved baz:', bazResult);
-  return fooResult + barResult + bazResult;
-}
+ ...
+   get length() { return 2 * this.width; }
+   get width() { return 0.5 * this.length; }
+ ...
+ object.length = 4;
+ console.log( object.width ); // 2 
 ```
-This works, regardless of whether _foo_, _bar_, or _baz_ are promises at any point in time. However, it may produce those side effects multiple times before ultimately getting a resolved value to cache.
+or
 
 ```
-Got resolved foo: 17
-Got resolved foo: 17
-Got resolved bar: 42
-Got resolved foo: 17
-Got resolved bar: 42
-Got resolved baz: 99
+...
+object.width = 2;
+console.log( object.length ); // 4
 ```
-Note, though, that because of memoization, this code will not not execute whatever is in _foo_ more than once, nor will it execute whatever is in _bar_ more than once. It is just that the portions of _computeSomething_ that _reference_ _foo_ and _bar_ may be executed more than once.
+but
+
+```
+object.length = object.width = undefined; // E.g., reset to rules or never assigned
+console.log( object.width ); // Gives nice error about about circularity.
+```
 
 - During the initial dynamic execution of a Rule, all the other Rules it requires are tracked. However, this does not apply to a _callback_ that lexically appears within a Rule, nor to a `then` (because this is equivalent to a callback). For example:
 
@@ -378,13 +414,78 @@ The correct way to do this is to split the database operation into two Rules, on
 ```
 This wil re-rerun the database fetch if _a_ changes, and it will recompute the _computationOnDbValue_ if _a_ or _b_ changes (automatically waiting on _dbValue_ to resolve if/as necessary).
 
+### Side-effects
+
 - Beware of side-effects. In general, functional/declarative and procedural code can be mixed with Rules, but if you do that, it is up to you to ensure that the side effects are correct.
 
-- A particular case of the general warning about side-effects, is that if you do some network or other activity asynchronously, beware of assignments to the result before it has resolved. For example, if you have a Rule that returns a `Promise` and then make an assignment to it before the `Promise` resolves, the final value of the Rule is not specified. 
+
+- A single Rule can have code that refers to _multiple_ other Rules that are `async` or have `Promise` values. That works. However, portions of the Rule may execute multiple times. For example, suppose there is a Rule like:
+
+```
+get computeSomething() {
+  const fooResult = this.foo;
+  console.log('Got resolved foo:', fooResult);
+  const barResult = this.bar;
+  console.log('Got resolved bar:', barResult);
+  const bazResult = this.baz;
+  console.log('Got resolved baz:', bazResult);
+  return fooResult + barResult + bazResult;
+}
+```
+This works, regardless of whether _foo_, _bar_, or _baz_ are promises at any point in time. However, it may produce those side effects multiple times before ultimately getting a resolved value to cache.
+
+```
+Got resolved foo: 17
+Got resolved foo: 17
+Got resolved bar: 42
+Got resolved foo: 17
+Got resolved bar: 42
+Got resolved baz: 99
+```
+Note, though, that because of memoization, this code will not not execute whatever is in _foo_ more than once, nor will it execute whatever is in _bar_ more than once. It is just that the portions of _computeSomething_ that _reference_ _foo_ and _bar_ may be executed more than once.
+
+- If you do some network or other activity asynchronously, beware of assignments to the result before it has resolved. For example, if you have a Rule that returns a `Promise` and then make an assignment to it before the `Promise` resolves, the final value of the Rule is not specified. 
+
+### Quirks
+
+- It is an error for a Rule formula to return `undefined`. Assigning `undefined` resets the Rule so that the forumla will be re-computed.
+
+- Currently, a function cannot be used as the initial value of a Rule created with `Rule.attach`. If a function is passed as the third argument, it is treated as a formula for computing the value.
+
+- A formula for `someRule` can refer to the formula of its superclass, but you cannot use `super.someRule`.  Instead, you have to call it as a method with two underscores: `super.__someRule()`.
+
+- Currently, re-rulifying or re-attaching is not likely to work, nor is rulifying a class prototype after the first instance is created.
 
 ## Implementation
 
-_(FIXME: give an overview of how it is implemented: rules and get/set, defineProperty or Proxy, and rule stack)_
+Each Rule is an object that keeps track of:
+
+- the instance it is attached to
+- the property name that it represents
+- the currently computed value
+- a list of the other Rules that were directly required to compute this value
+- a list of the other Rules that directly used this value in their computation
+
+The Rule instance itself is not created until the first time the Rule property is read. When we `attach` a Rule to an object (or to a prototype), we use `Object.defineProperty` to define get and set operations. These instantiate the Rule if neded (storing it on a private property of the instance), and then invoke the corresponding `get` or `set` method on the Rule instance (which follow the protocol of `Refelect.get` and `.set`).
+
+Arrays are similar, but produce one `Proxy` to the array rather than using `Object.defineProperty` length+1 times (for each element and for the `length` property itself).
+
+To build the lists of required and used Rules, we maintain a stack of Rules being computed:
+
+- When we `get` a Rule that does not yet have a value cached, that Rule is pushed onto the stack before computation, and popped off after.
+- In between - i.e., while computing the formula - any Rules we directly reference (whether cached or not) will have us added to their "usedBy" list, and they will be added to our "requires" list.
+- When a Rule is assigned, all of it's "usedBy" are reset (assigned undefined, which then recurses), and it is removed from the "usedBy" of each other Rule that it "requires". 
+
+("usedBy" is the workhorse. The reason we remove ourself on reset from the "usedBy" of the rules we "require", is that we are not really yet used by them at that point. We might well be assigned an overwriting value, and we wouldn't want a reset of those _potentially_ required rules to reset the assigned value. The only reason for "requires" is to have backpointers to those Rules so that we don't have to go searching for them.)
+
+During the computation of a formula, we also catch any references to a `Promise`, and store a new `Promise` as the catching Rule's pending value. Meanwhile, any time we store a `Promise`, we add a `.then` to it that will take action when the Promise is fullfilled:
+
+- If the `Promise` is resolved, the value is stored and each "usedBy" is re-tried.
+- If the `Promise` is rejected, each pending "usedBy" is rejected.
+
+Note that `.then` callbacks are never synchronous with fullfilment - they are always executed on a later tick. 
+
+An eager rule is simply one that demands itself on the next tick after being reset.
 
 ### Performance
 
@@ -394,7 +495,7 @@ The overall performance is highly dependent on the particular application. For e
 
 As it happens, reading a cached value in the current implementation is well within an order of magnitude of an ordinary method call. On Chrome or Edge, it appears to currently be a factor of 2 or 3 slower. 
 
-Computing a Rule appears to be about 20-30 times slower.
+Computing a Rule appears to be about 20-30 times slower in most browsers.
 
 A detailed profiling would, no doubt, take this down further.
 
@@ -406,19 +507,7 @@ The present author's own experience with it began while working for several year
 
 Later, he led a team that created a version of Croquet that used this technique. See [https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf](https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf)) and [https://alum.mit.edu/www/stearns/croquet/C5-06-BrieArchitecture.pdf](https://alum.mit.edu/www/stearns/croquet/C5-06-BrieArchitecture.pdf). This Javascript package is an outgrowth of that work.
 
-## API
 
-### ES6 Modules
-
-_(FIXME: exampes of setup for each, and define what is exported)_
-
-### attach
-
-_(FIXME: do it)_
-
-### rulify
-
-_(FIXME: do it)_
 
 
 

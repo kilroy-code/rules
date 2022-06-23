@@ -35,7 +35,13 @@ export class Computed extends Property {
 
       value = receiver[this.methodKey].call(receiver, receiver);
     } catch (thrown) {
-      value = this.maybeBecomePromisableByContagion(thrown);
+      switch (true) {
+      case (thrown instanceof Promisable):
+	value = this.becomePromisableByContagion(thrown);
+	break;
+      default:
+	throw thrown;
+      }
     } finally {
 
       stack.restoreComputing(this);

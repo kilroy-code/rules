@@ -39,7 +39,7 @@ export class Property extends Promisable {
     requires.forEach(required => required.usedBy = required.usedBy.filter(notUs));
   }
   
-  static attach(objectOrProto, key, methodOrInit, {configurable, assignment = (value => value)} = {}) {
+  static attach(objectOrProto, key, methodOrInit, {configurable, enumerable, assignment = (value => value)} = {}) {
     // Defines a Rule property on object, which may be an individual instance or a prototype.
     // If a method function is provided it is used to lazily calculate the value when read, if not already set.
     var ruleKey = '_' + key,
@@ -58,7 +58,7 @@ export class Property extends Promisable {
     delete objectOrProto[ruleKey]; // attach clears any previous rule.
     return Object.defineProperty(objectOrProto, key, {
       // Within these functions, objectOrProto might not equal this, as objectOrProto could be a __proto__.
-      configurable,
+      configurable, enumerable,
       get: function () {
         let rule = ensureRule(this);
         return rule.get(objectOrProto, key, this);

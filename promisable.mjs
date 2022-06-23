@@ -50,12 +50,9 @@ export class Promisable extends Tracked {
     }
     return true;
   }
-  maybeBecomePromisableByContagion(thrown) {
-    if (thrown instanceof Promisable) {
-      // A Computed subclass required something that threw a Promise in trackRule, above.
-      return new Promise((resolve, reject) => this.placeholderPromiseResolvers = {resolve, reject});
-    }
-    throw thrown; // Not a Promise rule, so re-signal the error.
+  becomePromisableByContagion(thrown) {
+    // A Computed subclass required something that threw a Promise in trackRule, above.
+    return new Promise((resolve, reject) => this.placeholderPromiseResolvers = {resolve, reject});
   }
   resetReferences() {
     delete this.placeholderPromiseResolvers;
