@@ -6,12 +6,6 @@ import { RuleStack } from './ruleStack.mjs';
 export class Tracked extends BaseRule {
   constructor(properties) {
     super(properties);
-
-    // TBD: Under what circumstance is this (and Computed#requires) a memory leak, where usedBy (or requires)
-    // is the only reference to rules in objects that are no longer otherwise live?
-    // Outline of potential fix: a global weakmap from rule => array-of-usedby-rules, and insert a reference
-    // to that array in each usedby rule. But then the array doesn't disappear until ALL the usedBy are gone. Hmm...?
-
     this.usedBy = []; // Other (computed) rules that reference us in their computation, and which we must reset when we are set.
   }
 

@@ -8,10 +8,6 @@
         Proxied
 */
 
-var fixmeDebug = false;
-export function debug(x) { fixmeDebug = x; }
-var oneShotArmed = true;
-
 // A horrible hook for injecting a new base class and construction mechanism.
 // define window.baseRuleClass before import.
 const BaseClass = ((typeof window !== 'undefined') && window.baseRuleClass) ?
@@ -31,6 +27,8 @@ const BaseClass = ((typeof window !== 'undefined') && window.baseRuleClass) ?
 export class BaseRule extends BaseClass {
   init({instance, key, instanceLabel}) { // instance must be the specific instance, not the __proto__.
     super.init();
+    // TODO: The instance <=> Rule reference loop can delay garbage collection. Can we get rid of it?
+    // Promisable.onResolved, Computed.retrieveValue, Proxied.store/retrieveValue, printing.
     this.instance = instance;
     this.key = key;
     this.collectingReferences = [];
@@ -60,19 +58,23 @@ export class BaseRule extends BaseClass {
     this.storeValue(...arguments);
   }
   reset() {
-    if (fixmeDebug) {
-      try {
-        if (oneShotArmed) {
-          oneShotArmed = false;
-          throw new Error('here');
-        } else {
-          console.log('reset', this);
-        }
-      } catch (e) {
-        console.log('reset', this, e);
-      }
-    }
     // Same code as set(), but not going through that method, which can be redefined for application-specific assignments.
     this._setInternal(this.instance, this.key, undefined);
+  }
+  free() {
+    // Release reference that this rule has, and remove it from it's instance.
+    const {instance, key} = this;
+    this.reset(); // Remove us from other's usedBy.
+    Object.getOwnPropertyNames(this).forEach(key => delete this[key]);
+    delete instance[key];
+  }
+  static get(instance) {
+    // Return all and only those rules that have ever been instantiated (and thus take up memory).
+    return Object.getOwnPropertyNames(instance).filter(prop => {
+      return prop.startsWith("_") && (instance[prop] instanceof BaseRule);
+    });
+  }
+  static free(instance) {
+    this.get(instance).forEach(ruleKey => instance[ruleKey].free());
   }
 }

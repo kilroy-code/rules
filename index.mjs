@@ -1,7 +1,3 @@
-// These top ones are for debugging. Not part of API (yet).
-export { RuleStack } from './ruleStack.mjs';
-export { BaseRule } from './baseRule.mjs';
-
 import { Proxied } from './proxied.mjs';
 import { Computed } from './computed.mjs';
 import { Eager } from './eager.mjs';
@@ -31,25 +27,18 @@ function defaultPropertyRuleNames(objectOrPrototype) {
 
 // Convert an entire instance or prototype, or list to Rules.
 // FIXME: let's either call this create or from, or just make it the constructor. (Make a new package version.)
-Rule.rulify = function rulify(object, {
-  asArray = Array.isArray(object),
-  ruleClass = asArray ? Proxied : Rule,
-  ruleNames = asArray ? [rulifiableArrayPropertyName] : defaultPropertyRuleNames(object),
-  eagerNames = [],
-  ...configuration // Might include, e.g., configurable, assignment, ...  See Property.attach().
-} = {}) {
-  let result = object; // In case attach produces a proxy.
+Rule.rulify = function rulify(object, options = {}) {
+  if (Array.isArray(object)) return Proxied.attach(object);
+  const {
+    ruleClass = Rule, 
+    ruleNames = defaultPropertyRuleNames(object),
+    eagerNames = [],
+    ...configuration // Might include, e.g., configurable, assignment, ...  See Property.attach().
+  } = options;
   ruleNames.forEach(function (key) {
-    let formula;
-    if (Array.isArray(key)) {
-      formula = key[1].get;
-      key = key[0];
-    } else {
-      formula = object[key];
-    }
-    let isEager = eagerNames.includes(key);
-    let klass = isEager ? Eager : ruleClass; // fixme
-    result = klass.attach(result, key, formula, configuration);
+    const isEager = eagerNames.includes(key),
+	  klass = isEager ? Eager : ruleClass;
+    klass.attach(object, key, object[key], configuration);
   });
-  return result;
+  return object;
 }

@@ -330,19 +330,29 @@ Defines `objectOrProto[propertyName]` as a Rule in which `methodOrInit` is the f
 
 ### rulify
 
-`Rule.rulify(object, {ruleNames, eagerNames, configurable, enumerable})`
+`Rule.rulify(object, {ruleNames, eagerNames, configurable, enumerable}) => object`
 
 Creates a rule on `object` for each property named in `ruleNames`.  `configurable` and `enumerable` are as for `Object.defineProperty()`. See [attach](#attach), above. If a name appears in (`ruleNames` and) `eagerNames`, the rule will be eager.
 
 `ruleNames` defaults to a list of each own-property in `object` that is defined with `get` and no `set`. (Currently, if the list is empty, it is populated by every single own-property in `object` except `constructor`. However, this behavior might be dropped in future versions.)
 
-`Rule.rulify(array)`
+`Rule.rulify(array) => a rulified Array`
 
 Return an Array (actually, a Proxy to an Array) in which each element, and the length property, are Rules. The initial values of each are the elements of `array`.  See [Arrays](#arrays), above.
 
 It is not specified whether changes to the returned value will effect the original `array`. (Currently, they do.)
 
+### free
+
+`Rule.free(instance)`
+
+Resets and deletes all Rules from `instance`. It does not effect the prototype chain, and therefore there is no harm if other Rules re-demand a Rule on instances of rulified class.prototypes. In such cases, the Rule will just be recreated as if it were the first reference to the rulified property.
+
+This is not normally necessary, as references to other Rules are removed by reset. But it may be useful if you have a lot of rulified objects that have been around long enough to be "tenured", and would like to explicitly release associated Rule memory. Of course, you are responsible for any other memory.
+
 ## Pitfalls and Common Mistakes
+
+There are a three or four things to watch out for in each of [tracking](#tracking), [side-effects](#side-effects), or [quirks](#quirks) of the implementation.
 
 ### Tracking
 
@@ -397,7 +407,10 @@ Rule.rulify(Callbacks.prototype);
 ```
 If there is an assignment (including a reset) of _a_, then _data_ will correctly be recomputed because a was referenced dynamically within the Rule formula execution, where data is return. However, the callback happens later, while Rules are not being tracked. The Rule _b_ will therefore not be tracked as being required for _data_, and an assignment or reset of _b_ will not recompute the _data_.
 
-The correct way to do this is to split the database operation into two Rules, one that returns a Promise indicating that the database operation has been started, and one that does something with the results:
+The correct way to do this is to split the database operation into two Rules:
+
+1. The first makes the database request and promises the result of that request alone. It _must not_ reference any Rules within the callback.
+- The second uses that result and any other desired Rules:
 
 ```
  get dbValue() {
@@ -454,6 +467,8 @@ Note, though, that because of memoization, this code will not not execute whatev
 
 - A formula for `someRule` can refer to the formula of its superclass, but you cannot use `super.someRule`.  Instead, you have to call it as a method with two underscores: `super.__someRule()`.
 
+- Rules refering to other Rules keep references to them in both directions. These references are freed when the rule is reset. (But of course, the application might then demand it again.) The Rule machinery itself is not removed when reset. If you really need to thoroughly remove all memory used by all rules in an instance, use [Rule.free](#free).
+
 - Currently, re-rulifying or re-attaching is not likely to work, nor is rulifying a class prototype after the first instance is created.
 
 ## Implementation
@@ -476,7 +491,7 @@ To build the lists of required and used Rules, we maintain a stack of Rules bein
 - In between - i.e., while computing the formula - any Rules we directly reference (whether cached or not) will have us added to their "usedBy" list, and they will be added to our "requires" list.
 - When a Rule is assigned, all of it's "usedBy" are reset (assigned undefined, which then recurses), and it is removed from the "usedBy" of each other Rule that it "requires". 
 
-("usedBy" is the workhorse. The reason we remove ourself on reset from the "usedBy" of the rules we "require", is that we are not really yet used by them at that point. We might well be assigned an overwriting value, and we wouldn't want a reset of those _potentially_ required rules to reset the assigned value. The only reason for "requires" is to have backpointers to those Rules so that we don't have to go searching for them.)
+("usedBy" is the workhorse. The reason we remove ourself from the "usedBy" of the rules we "require", is that after reset we are not really used by them at that point. We might well be assigned an overwriting value, and we wouldn't want a reset of those _potentially_ required rules to reset the assigned value. The only reason for "requires" is to have backpointers to those Rules so that we don't have to go searching for them.)
 
 During the computation of a formula, we also catch any references to a `Promise`, and store a new `Promise` as the catching Rule's pending value. Meanwhile, any time we store a `Promise`, we add a `.then` to it that will take action when the Promise is fullfilled:
 

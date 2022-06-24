@@ -8,8 +8,8 @@ export class Property extends Promisable {
     this.cached = props.init;
     this.requires = []; // Other rules that WE require, for use in resetReferences.    
   }
-  storeValue(target, property, value, receiver = this.instance) {
-    super.storeValue(target, property, value, receiver);    
+  storeValue(target, property, value) {
+    super.storeValue(...arguments);    
     this.cached = value;
   }
   retrieveValue() {

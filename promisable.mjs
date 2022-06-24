@@ -33,8 +33,8 @@ await example.reference; // 2
 //   handler, or be treated by the Javascript implentation as an unhandled rejection.)
 
 export class Promisable extends Tracked {
-  storeValue(target, property, value, receiver = target) {
-    this.setupPromiseResolution(target, property, value, receiver);
+  storeValue() {
+    this.setupPromiseResolution(...arguments);
     // No need: super.storeValue(ruleTarget, property, value, receiver);
   }
   setupPromiseResolution(target, property, value, receiver) {
