@@ -36,9 +36,16 @@ Rule.rulify = function rulify(object, options = {}) {
     ...configuration // Might include, e.g., configurable, assignment, ...  See Property.attach().
   } = options;
   ruleNames.forEach(function (key) {
+    let formula;
+    if (Array.isArray(key)) {
+      formula = key[1].get;
+      key = key[0];
+    } else {
+      formula = object[key];
+    }
     const isEager = eagerNames.includes(key),
 	  klass = isEager ? Eager : ruleClass;
-    klass.attach(object, key, object[key], configuration);
+    klass.attach(object, key, formula, configuration);
   });
   return object;
 }
