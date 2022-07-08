@@ -1292,6 +1292,30 @@ expensive compute b`);
           expect(reflector.foo).toBe(17);
 	});
       });
+      it('can be the target of a Proxy.', function () {
+	// See comments for ensureRule of a Property.
+	// This matters for ki1r0y Blocks in which models are proxies in which assignment is trapped to go through Croquet.
+	class Foo {
+	  get rule() {
+	    return 42;
+	  }
+	}
+	Rule.rulify(Foo.prototype);
+	let assigned = 0,
+	    foo = new Foo(),
+	    proxy = new Proxy(foo, {
+	      set(target, key, value) {
+		assigned++;
+		target[key] = value;
+		return true;
+	      }
+	    });
+	expect(proxy.rule).toBe(42);
+	expect(assigned).toBe(0);
+	proxy.rule = 17;
+	expect(proxy.rule).toBe(17);
+	expect(assigned).toBe(1);
+      });
     });
     describe('with fancy code-related examples', function () {
       let effects;

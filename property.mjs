@@ -53,7 +53,20 @@ export class Property extends Promisable {
     let ensureRule = (instance) => {
       // The actual Rule object is added lazilly, only when the property is first accessed (by get or set).
       if (instance.hasOwnProperty(ruleKey)) return instance[ruleKey];
-      return instance[ruleKey] = this.create({instance, key, init, methodKey});
+      const rule = this.create({instance, key, init, methodKey});
+      // This is very subtle:
+      // IF we said here:
+      //    instance[ruleKey] = rule;
+      // AND if instance was a Proxy to the thing we rulified, then assigning instance[ruleKey] would go through the Proxy's set trap.
+      // That's not what we would want (e.g., if the Proxy is something that traps assignments and nothing else, merely getting
+      // the computed value of a rule named 'foo' would use the Proxy trap to assign '_foo').
+      // Using Reflect.set here allows us to bypass that.
+      // (The assignment just goes through the instance's setter for the propery, which may be a Proxy with a set trap.
+      //  However, Reflect.set uses property descriptor of the target===objectOrProto. In this case, there is no descriptor
+      //  for ruleKey (e.g., with a leading underscore), but I _think_ that Reflect.set then uses the default Object property assignment behavior,
+      //  rather than the trap behavior of the instance===Proxy.
+      Reflect.set(objectOrProto, ruleKey, rule, instance);
+      return rule;
     };
     delete objectOrProto[ruleKey]; // attach clears any previous rule.
     return Object.defineProperty(objectOrProto, key, {
