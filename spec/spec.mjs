@@ -235,7 +235,9 @@ describe('A Rule', function () {
     }
     it('can be defined to eagerly re-evaluate', function (done) {
       class Eager {
-        referenced() { return 1; }
+        referenced() {
+	  return 1;
+	}
         eager() {
           this.constructor.count++;
           return this.referenced;
@@ -245,13 +247,21 @@ describe('A Rule', function () {
       Rule.rulify(Eager.prototype, {eagerNames: ['eager']});
       let eager = new Eager;
       expect(Eager.count).toBe(0); // eager has not been referenced yet.
-      expect(eager.eager).toBe(1);
+      expect(eager.eager).toBe(1); // demand eager
       expect(Eager.count).toBe(1);
-      eager.referenced = 2;
+      eager.referenced = 2;        // referenced value is changed, which causes eager to be re-demanded
       setTimeout(() => { // It doesn't re-evaluate right away, but after a tick.
-        expect(Eager.count).toBe(2); // without referencing eager again.
+        expect(Eager.count).toBe(2); // without referencing eager again, yet eager evaluates again
         expect(eager.eager).toBe(2);
-        done();
+	eager.eager = undefined; // reset eager, which does NOT cause it to be re-demanded
+	setTimeout(() => {
+	  expect(Eager.count).toBe(2); // still
+	  expect(eager.eager).toBe(2); // now explicitly re-demand it
+	  setTimeout(() => {
+	    expect(Eager.count).toBe(3); // Now that it has been referenced, it evaluates again.
+            done();
+	    });
+	});
       });
     });
     describe('on instance', function () {
