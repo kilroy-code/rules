@@ -506,7 +506,7 @@ An eager rule is simply one that demands itself on the next tick after being res
 
 This kind of system is usually used in cases where it simply would not be possible to write the system without it, never mind run it. In such cases, we're generally happy if it runs within an order of magnitude of hand-crafted "normal" code.
 
-The overall performance is highly dependent on the particular application. For example, suppose that an application depends on maintaining a core set of Rules of modest scale -- say a few hundred or a thousand Rules. There might be 10,000 or more Rules that these depend on. If rendering the application ultimately only has to look at the just core set, and most are cached with only a few updating, then the 10k Rules behind it are not examined at all during a typical rendering frame. In this case, t doesn't matter how long it takes to look at the 10k required rules, because we all have already cached the 1k rules needed for rendering. 
+The overall performance is highly dependent on the particular application. For example, suppose that an application depends on maintaining a core set of Rules of modest scale -- say a few hundred or a thousand Rules. There might be 10,000 or more Rules that these depend on. If rendering the application ultimately only has to look at just the core set, and most are cached with only a few updating, then the 10k Rules behind it are not examined at all during a typical rendering frame. In this case, it doesn't matter how long it takes to look at the 10k required rules, because we all have already cached the 1k rules needed for rendering.
 
 As it happens, reading a cached value in the current implementation is well within an order of magnitude of an ordinary method call. On Chrome or Edge, it appears to currently be a factor of 2 or 3 slower. 
 
@@ -520,13 +520,13 @@ Depedency-directed backtracking has been used for decades in artifical intellige
 
 The present author's own experience with it began while working for several years at a Knowledge-Based Engineering tools company that produced CAD systems for engineers. (This company spawned an IPO, several spinnoffs, and acquisitions by Oracle, Autodesk, and Dassault.) See [https://en.wikipedia.org/wiki/ICAD_(software)](https://en.wikipedia.org/wiki/ICAD_(software))
 
-Later, he led a team that created a version of Croquet that used this technique, called Brie. See [https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf](https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf)) and [https://alum.mit.edu/www/stearns/croquet/C5-06-BrieArchitecture.pdf](https://alum.mit.edu/www/stearns/croquet/C5-06-BrieArchitecture.pdf). This Javascript package is an outgrowth of that work. Brie had a additional semantics around copying, that has not yet been incorporated into Rules. 
+Later, he led a team that created a version of Croquet that used this technique, called Brie. See [https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf](https://alum.mit.edu/www/stearns/croquet/C5-06-BrieUserExperience.pdf)) and [https://alum.mit.edu/www/stearns/croquet/C5-06-BrieArchitecture.pdf](https://alum.mit.edu/www/stearns/croquet/C5-06-BrieArchitecture.pdf). This Javascript package is an outgrowth of that work. Brie had additional semantics around copying, that has not yet been incorporated into Rules.
 
 Opportunities for further work in Rules includes:
 
 - Formula capture for [arrays](#arrays), so that, e.g., a change to a single element of a rulified array causes the captured formula to be recomputed only for the correspondoning element of an array that was mapped from the original.
 - [Performance](#performance) optimization.
-- Get rid of some of the [quirks](#quirks) of implementation, such as `super.__someRule()`.
+- Get rid of some of the [quirks](#quirks) of implementation.
 - Copy semantics like Brie (see immediately above).
 - Simplifying and clarifying the test suite, and documenting it here.
 - Packaging and distribution (npm, unpkg, etc.)
