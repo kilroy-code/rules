@@ -5,14 +5,6 @@ export const Rule = Computed;
 
 Rule.Eager = Eager;
 
-function rulifiableArrayPropertyName(key) { // We don't want to rulify array methods
-  let keyString = key.toString();
-  if (keyString === 'length') return Proxied.lengthRuleKey; 
-  if (/^[0-9]+$/.test(keyString)) return keyString; // integer keys are good
-  // Everything else, we'll want to use the property (typically a method) in object.
-  return false;
-}
-
 function getterPropertyData(objectOrPrototype) {
   return Object.entries(Object.getOwnPropertyDescriptors(objectOrPrototype)).filter(([key, descriptor]) => descriptor.get && !descriptor.set);
 }

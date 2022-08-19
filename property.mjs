@@ -72,6 +72,9 @@ export class Property extends Promisable {
     return Object.defineProperty(objectOrProto, key, {
       // Within these functions, objectOrProto might not equal this, as objectOrProto could be a __proto__.
       configurable, enumerable,
+      // FIXME: is there some way to reset dependencies if someone explicitly deletes the property?
+      // e.g., delete this[key]
+      // TODO: Add a unit test that illustrates the behavior, and added to README.md#quirks
       get: function () {
         let rule = ensureRule(this);
         return rule.get(objectOrProto, key, this);
