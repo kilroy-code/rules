@@ -167,6 +167,8 @@ There are several mechanisms in Javascript that allow for such distinctions, inc
 
 To accomodate such distinctions, the code for computing a Rule value is always passed an argument that is the _receiver_.  Usually this is the same as `this`, but can be different (e.g., in `Reflect.get`). You can ignore this argument (e.g., you don't even have to declare it in your forumala code, but it's there if you want. (For example, I often name that argument `self` and use it where I would otherwise use `this`.) This is particularly convenient with "Dynamic Attachment" and `=>` functions.
 
+Note, however, that getter methods (preceded by `get` in the class definition) cannot take arguments. So if you want to pass an argument for `this` (that, self, etc.), do not use `get`. See [Rulify](#rulify)
+
 _(FIXME: give an example that shows where they can be different.)_
 
 

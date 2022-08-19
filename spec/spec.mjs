@@ -53,15 +53,15 @@ describe('A Rule', function () {
     });
     it('converts classes defined conventionally', function () {
       class Rectangle {
-        width() { return 0; }
-        length() { return 0; }
-        area() { return this.width * this.length; }
+        get width() { return 0; }
+        get length() { return 0; }
+        get area() { return this.width * this.length; }
       }
       class Box extends Rectangle {
-        volume() { return this.area * this.height; }
+        get volume() { return this.area * this.height; }
       }
       Rule.rulify(Rectangle.prototype);
-      Rule.rulify(Box.prototype, {ruleNames: ['volume', 'height']});
+      Rule.rulify(Box.prototype);
       var box = new Box();
       box.length = 5;
       expect(box.length).toBe(5);
@@ -90,20 +90,20 @@ describe('A Rule', function () {
     });
     it('subclass computation can reference superclass.', function () {
       class Super {
-        root() { return 3; }
-        foo() { return this.root; }
-        bar() { return this.foo + 1; }
-        baz() { return 10; }
+        get root() { return 3; }
+        get foo() { return this.root; }
+        get bar() { return this.foo + 1; }
+        get baz() { return 10; }
       }
       class Sub extends Super {
-        root() { return 2; }
-        foo(self) { // Second argument to rule is the super.foo(self) method, bound to this.
-          return super.__foo(self) * 10;
+        get root() { return 2; }
+        get foo() {
+          return super.__foo() * 10;
         }
         // No baz defined.
       }
       class SubSub extends Sub {
-        baz(self) { return super.__baz(self) * 2; }
+        get baz() { return super.__baz() * 2; }
       }
       Rule.rulify(Super.prototype);
       Rule.rulify(Sub.prototype);
@@ -235,10 +235,10 @@ describe('A Rule', function () {
     }
     it('can be defined to eagerly re-evaluate', function (done) {
       class Eager {
-        referenced() {
+        get referenced() {
 	  return 1;
 	}
-        eager() {
+        get eager() {
           this.constructor.count++;
           return this.referenced;
         }
@@ -293,11 +293,11 @@ describe('A Rule', function () {
     });
     describe('overrides rules from later on inheritance chain', function () {
       class OverrideExample {
-        theRule() { return 'compiled in'; }
-        dependant(self) { return 'got ' + self.theRule; }
+        get theRule() { return 'compiled in'; }
+        get dependant() { return 'got ' + this.theRule; }
       }
       class Relabled extends OverrideExample {
-        theRule() { return 'compiled override'; }
+        get theRule() { return 'compiled override'; }
       }
       Rule.rulify(OverrideExample.prototype);
       Rule.rulify(Relabled.prototype);
@@ -334,20 +334,20 @@ describe('A Rule', function () {
     describe('with asynchronicity', function () {
       it('of parallel promises', async function () {
         class All {
-          aVal() { return 'a'; }
-          bVal() { return 'b'; }
-          cVal() { return 'c'; }
-          a() { return Promise.resolve(this.aVal); }
-          b() { return Promise.resolve(this.bVal); }
-          c() { return this.cVal; }
-          refA() { return this.a; }
-          refB() { return this.b; }
-          refC() { return this.c; }
+          get aVal() { return 'a'; }
+          get bVal() { return 'b'; }
+          get cVal() { return 'c'; }
+          get a() { return Promise.resolve(this.aVal); }
+          get b() { return Promise.resolve(this.bVal); }
+          get c() { return this.cVal; }
+          get refA() { return this.a; }
+          get refB() { return this.b; }
+          get refC() { return this.c; }
           //all() { return [this.refA, this.refB, this.refC]; }
           // The above works fine, and it is completely unnecessary to use Promise.all
           // as in the following line. But IWBNI it worked anyway. 
-          all() { return Promise.all([this.refA, this.refB, this.refC]); }
-          ref() { return this.all; }
+          get all() { return Promise.all([this.refA, this.refB, this.refC]); }
+          get ref() { return this.all; }
         }
         Rule.rulify(All.prototype);
         let all = new All(),
@@ -363,9 +363,14 @@ describe('A Rule', function () {
         function fetchFromDatabase(key, cb) {
           setTimeout(() => cb(null, key + 2), 10);
         }
-        class Callbacks {
+	class Callbacks {
           a() { return 1; }
           b() { return 2; }
+	  // In much of the following, we use callbacks in typical old-school NodeJS style, defined with function (...) { },
+	  // rather than fat arrow. That means that we can't use 'this' to refer to the instance.
+	  // That's fine, we can use the convenience argument 'self'. HOWEVER, getters cannot take arguments,
+	  // so we cannot decoarate these methods with 'get'. That's also fine, as Rule.rulify will automatically
+	  // rulify all the methods (except the constructor) IFF there are not getters in the class definition.
           noPromise(self) {
             var a = self.a;
             var container = [];
@@ -434,6 +439,10 @@ describe('A Rule', function () {
             return Promise.resolve(this.keyToSomething)
               .then(resolved => resolved + this.valueOnWhichEverythingDepends);
           }
+	  // A rule can be marked async and references will resolve when the value resolves.
+	  // Since an async method cannot ordinarily be a getter, we cannot decorate this method with 'get'.
+	  // Rule.rulify() will rulify all the 'get' methods, if any, and otherwise rulify all methods except the constructor.
+	  // So we have two choices: either explicitly list the rules we want to rulify, or don't use 'get' in this class definition.
           async alsoCorrectInitialAnswerButDoesNotTrackDependency() {
             const someMeasurement = await Promise.resolve(this.keyToSomething);
             return someMeasurement + this.valueOnWhichEverythingDepends;
@@ -667,8 +676,8 @@ describe('A Rule', function () {
   describe('composite', function () {
     it('a rule can be dynamically added to an instance (e.g., for a named child or view)', function () {
       class Composite {
-        a() { return 'a'; }
-        refB(self) { return this.b; }
+        get a() { return 'a'; }
+        get refB() { return this.b; }
       }
       Rule.rulify(Composite.prototype);
       let composite = new Composite();
@@ -687,23 +696,23 @@ describe('A Rule', function () {
           this.input1 = value1;
           this.input2 = value2;
         }
-        computationOnValue1() {
+        get computationOnValue1() {
           computations.push(`simple compute ${this.name}`);
           return this.input1 * 2;
         }
-        expensiveComputationOnValue2() {
+        get expensiveComputationOnValue2() {
           computations.push(`expensive compute ${this.name}`);
           return Math.sqrt(this.input2);
         }
-        total() { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
+        get total() { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
       }
       class Parent {
-        parameterA() { return 1; }
-        parameterB() { return 2; }
-        parameterC() { return 9; }
-        a() { return new Child('a', this.parameterA, this.parameterC); }
-        b() { return new Child('b', this.parameterB, this.parameterC); }
-        sum() { return this.a.total + this.b.total; }
+        get parameterA() { return 1; }
+        get parameterB() { return 2; }
+        get parameterC() { return 9; }
+        get a() { return new Child('a', this.parameterA, this.parameterC); }
+        get b() { return new Child('b', this.parameterB, this.parameterC); }
+        get sum() { return this.a.total + this.b.total; }
       }
       Rule.rulify(Child.prototype);
       Rule.rulify(Parent.prototype);
@@ -737,23 +746,23 @@ expensive compute a`);
           this.name1 = name1;
           this.name2 = name2;
         }
-        computationOnValue1() {
+        get computationOnValue1() {
           computations.push(`simple compute ${this.name}`);
           return this.parent[this.name1] * 2;
         }
-        expensiveComputationOnValue2() {
+        get expensiveComputationOnValue2() {
           computations.push(`expensive compute ${this.name}`);
           return Math.sqrt(this.parent[this.name2]);
         }
-        total() { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
+        get total() { return this.computationOnValue1 + this.expensiveComputationOnValue2; }
       }
       class Parent {
-        parameterA() { return 1; }
-        parameterB() { return 2; }
-        parameterC() { return 9; }
-        a() { return new Child('a', this, 'parameterA', 'parameterC'); }
-        b() { return new Child('b', this, 'parameterB', 'parameterC'); }
-        sum() { return this.a.total + this.b.total; }
+        get parameterA() { return 1; }
+        get parameterB() { return 2; }
+        get parameterC() { return 9; }
+        get a() { return new Child('a', this, 'parameterA', 'parameterC'); }
+        get b() { return new Child('b', this, 'parameterB', 'parameterC'); }
+        get sum() { return this.a.total + this.b.total; }
       }
       Rule.rulify(Child.prototype);
       Rule.rulify(Parent.prototype);
@@ -980,7 +989,7 @@ expensive compute b`);
       var data = Rule.rulify({
         a: () => Promise.resolve(Rule.rulify({
           b: () => Promise.resolve(Rule.rulify({
-            c: () => Promise.resolve(17)
+            c: () => Promise.resolve(17)  // won't get here
           }))
         }))
       });
@@ -1010,18 +1019,18 @@ expensive compute b`);
           properties and any eager dependents resolve individually.
 	*/
         class RandomPromises {
-          p1() { return new Promise(resolve => setTimeout(() => resolve(1), Math.random() * 10)); }
-          p2() { return new Promise(resolve => setTimeout(() => resolve(2), Math.random() * 10)); }
-          p3() { return new Promise(resolve => setTimeout(() => resolve(3), Math.random() * 10)); }
+          get p1() { return new Promise(resolve => setTimeout(() => resolve(1), Math.random() * 10)); }
+          get p2() { return new Promise(resolve => setTimeout(() => resolve(2), Math.random() * 10)); }
+          get p3() { return new Promise(resolve => setTimeout(() => resolve(3), Math.random() * 10)); }
         }
         Rule.rulify(RandomPromises.prototype);
         it('a value that produces values dependent on these, will not resolve until all are ready', async function () {
           class AllAtOnce extends RandomPromises {
-            bang() {
+            get bang() {
               let {p1, p2, p3} = this;
               return {p1, p2, p3};
             }
-            afterBang() {
+            get afterBang() {
               let {p1, p2, p3} = this.bang;
               return p1 + p2 + p3;
             }
@@ -1031,9 +1040,9 @@ expensive compute b`);
         });
         it('individual properties that depend on these will be ready when possible', async function () {
           class Individual extends RandomPromises {
-            d1() { return this.p1; }
-            d2() { return this.p2; }
-            d3() { return this.p3; }
+            get d1() { return this.p1; }
+            get d2() { return this.p2; }
+            get d3() { return this.p3; }
           }
           Rule.rulify(Individual.prototype);
           let i = new Individual();
@@ -1160,7 +1169,7 @@ expensive compute b`);
 	});
 	it('compute an initial Promise value that resolves.', async function () {
           class Klass {
-            rule() { return Promise.resolve(17); }
+            get rule() { return Promise.resolve(17); }
           }
           Rule.rulify(Klass.prototype);
           let object = new Klass(),
@@ -1170,8 +1179,8 @@ expensive compute b`);
 	});
 	it('reference a promise that resolves.', async function () {
           class Klass {
-            promise() { return Promise.resolve(17); }
-            rule() { return this.promise; }
+            get promise() { return Promise.resolve(17); }
+            get rule() { return this.promise; }
           }
           Rule.rulify(Klass.prototype);
           let object = new Klass(),
@@ -1181,8 +1190,8 @@ expensive compute b`);
 	});
 	it('reference a promise that resolves to produce a promise that resolves.', async function () {
           class Klass {
-            promise() { return Promise.resolve(17); }
-            rule() { return Promise.resolve(this.promise); }
+            get promise() { return Promise.resolve(17); }
+            get rule() { return Promise.resolve(this.promise); }
           }
           Rule.rulify(Klass.prototype);
           let object = new Klass(),
@@ -1192,10 +1201,10 @@ expensive compute b`);
 	});
 	it('reference an array of promises to be resolved.', async function () {
           class Klass {
-            anotherPromise() { return Promise.resolve(2); }
-            promise() { return [1, this.anotherPromise, Promise.resolve(17)]; }
-            rule() { return Promise.all(this.promise); }
-            ref() { return this.rule; }
+            get anotherPromise() { return Promise.resolve(2); }
+            get promise() { return [1, this.anotherPromise, Promise.resolve(17)]; }
+            get rule() { return Promise.all(this.promise); }
+            get ref() { return this.rule; }
           }
           Rule.rulify(Klass.prototype);
           let object = new Klass(),
@@ -1259,8 +1268,8 @@ expensive compute b`);
           });
           it('with dependencies resolving.', async function () {
             class Observable {
-              foo() { return 17; }
-              bar() { return this.foo; }
+              get foo() { return "assigned a value, below"; }
+              get bar() { return this.foo; }
             }
             Rule.rulify(Observable.prototype, {assignment});
             let instance = new Observable();
@@ -1287,7 +1296,7 @@ expensive compute b`);
       });
       describe('Reflect.get/set protocol', function () {
 	class Reflector {
-          foo() { return 42; }
+          get foo() { return 42; }
 	}
 	Rule.rulify(Reflector.prototype);
 	it('can be get.', function () {
@@ -1348,16 +1357,16 @@ expensive compute b`);
 	  bars() { effect('bars'); return Rule.rulify(this.children.map(child => child.bar)); }
 	}
 	class AModel {
-	  foo() { effect('AModel.foo'); return 'a'; }
-	  bar() { effect('AModel.bar'); return 'aa'; }
+	  get foo() { effect('AModel.foo'); return 'a'; }
+	  get bar() { effect('AModel.bar'); return 'aa'; }
 	}
 	class AModel1 {
-	  foo() { effect('AModel.foo'); return 'a1'; }
-	  bar() { effect('AModel.bar'); return 'aa1'; }
+	  get foo() { effect('AModel.foo'); return 'a1'; }
+	  get bar() { effect('AModel.bar'); return 'aa1'; }
 	}
 	class BModel {
-	  foo() { effect('BModel.foo'); return 'b'; }
-	  bar() { effect('BModel.bar'); return 'bb'; }
+	  get foo() { effect('BModel.foo'); return 'b'; }
+	  get bar() { effect('BModel.bar'); return 'bb'; }
 	}
 	[ParentModel, AModel, AModel1, BModel].forEach(c => Rule.rulify(c.prototype));
 	let parent = new ParentModel();
