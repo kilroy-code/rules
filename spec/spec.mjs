@@ -1,5 +1,8 @@
 /*global describe, it, require*/
 
+// Runs in NodeJS or browser, as long as we're in ES6. Otherwise, could just use Date.
+const perf = (typeof performance === 'undefined') ? (await import('perf_hooks')).performance : performance;
+
 import { Rule } from '../index.mjs';
 
 describe('A Rule', function () {
@@ -257,10 +260,8 @@ describe('A Rule', function () {
 	setTimeout(() => {
 	  expect(Eager.count).toBe(2); // still
 	  expect(eager.eager).toBe(2); // now explicitly re-demand it
-	  setTimeout(() => {
-	    expect(Eager.count).toBe(3); // Now that it has been referenced, it evaluates again.
-            done();
-	    });
+	  expect(Eager.count).toBe(3); // which caused it to be re-evaluated
+          done();
 	});
       });
     });
@@ -497,11 +498,11 @@ describe('A Rule', function () {
           methods = Array.from({length: cycles}, () => new UnrulifiedExample()),
           rules = Array.from({length: cycles}, () => new RulifiedExample());
       prep(methods, rules);
-      let start = performance.now(),
+      let start = perf.now(),
           methodSum = methods.reduce((sum, instance) => sum + instance.someValue(), 0),
-          mid = performance.now(),
+          mid = perf.now(),
           ruleSum = rules.reduce((sum, instance) => sum + instance.someValue, 0),
-          end = performance.now(),
+          end = perf.now(),
           method = mid - start,
           rule = end - mid,
           factor = rule / method,
@@ -1290,7 +1291,6 @@ expensive compute b`);
 	object.toString = () => "[fred]";
 	expect(object.someRule).toBe(1);
 	expect(object._someRule.toString()).toBe("[Computed [fred] someRule]");
-	window.fixme = object._someRule;
 	proxied.forEach(_ => _); // The specific behavior of printing is not defined for elements that have not been demanded.
 	expect(object._someRule.requires[0].toString()).toBe("[Proxied [1,2] 0]");
       });
