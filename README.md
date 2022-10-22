@@ -6,7 +6,9 @@ The cells in a spreadsheet work this way. You can write a value to a cell, and t
 
 Rules are exactly the same thing, but can be used in any Javascript program. A Rule is like a cell in a spreadsheet, and the code in the Rule is like the formula.
 
-This style of programming is particularly useful for complex systems, or where different parts of the system are authored by different people or organizations. 
+This style of programming is particularly useful for complex systems, or where different parts of the system are authored by different people or organizations.
+
+While it is easy for rule-based systems to be written in a functional-programming style, rules are also easily integrated with external-systems that depend on side-effects or asynchronous messages.
 
 This README includes:
 
@@ -48,7 +50,7 @@ We did not define any "setter" methods, but `rulify` automatically creates them.
 box.length = 5;         // The "set" method was automatically generated.
 console.log(box.area);  // 15! 
 ```
-We did not have to tell _area_ that it needed to be recomputed now that _length_ was changed. 
+We did not have to tell _area_ that it needed to be recomputed now that _length_ was changed. The system keeps track of the dependencies.
 
 Rules are:
 
@@ -62,6 +64,7 @@ Rules are:
 - applicable to [POJOs](#pojos)
 - applicable to [Arrays](#arrays)
 - transparently supportive of [`async` and `Promise`](#promises-and-async-rules)
+- integrate with [eager](#eager-rules) side-effects on existing external system that are not rule-based
 
 Each of these are described in the following sections.
 
@@ -136,7 +139,7 @@ Imagine that you have a spreadsheet with some big table way out to the side offs
 
 Demand-driven evaluation is more than just an optimization. It is necessary for "turtles all the way down" systems, in which objects have behaviors that are themslves objects that have behaviors. It is fine for such objects to show their behavior objects when inspected by the user. But the system cannot cause them all to come into being when defined, because the initialization would never terminate.
 
-Lazy evaluation is the default behavior. You can also have "eager" Rules that automatically get re-demanded after they have been reset. See `rulify` and `attach`. Note that even an eager rule does not cause itself to exist as soon as it is defined (e.g., on a prototype) - it still needs to be explicitly demanded that first time by the application.
+Lazy evaluation is the default behavior. You can also have "eager" Rules that automatically get re-demanded after a referenced dependency is reset. See [Eager Rules](#eager-rules).
 
 ### Dependency-Directed Backtracking
 
@@ -312,6 +315,42 @@ Note that none of the Rule code does anything at all with `async` or `await`. It
 
 This is very convenient, especially when working with code produced by others with which you are not familiar or which may be changing -- including code that is changing as you use it! But there is an important reason for it beyond convenience. In some systems, particularly distributed systems, it is very important that the system (or some well-defined portion of the system) produce deterministically identical results on different computers. This is difficult when some results involve user interactions and communications over the network (which may take different amounts of time for different users). When combined with memoization, above, the magic resolution of `Promises` makes it practical to write a system in which a Rules resolved value is the same on each system regardless of how long things took, or what order the dependents were computed in. (This is assuming that the Rules do not depend on side effects, such as incrementing a set of order-dependent counters, or providing different asynchronous networked answers for different users.)
 
+### Eager Rules
+
+The forumula of an ordinary rule is computed (and cached) only when code references the value. If the formula depends on another rule that is reset, an ordinary, demand-driven rule will not recompute until its value is once again referenced.
+
+However, a rule can be designated as being eager. See [Rulify](#rulify) and [attach](#attach).
+
+ Like all rules, an eager rule does not cause itself to exist as soon as it is defined or explicitly reset by setting it directly to undefined - it still needs to be explicitly demanded that first time by the application. However, if that computed forumula depends on other rules, and any of those rules are reset, an eager rule will automatically be re-computed.
+
+Eager rules are useful for modeling side-effect on external systems. For example, one might have a rulfied object that maintains a connection to some existing external object that cannot be rulified, such as a browser DOM Element, or persistent storage. One might create an eager rule called `update` (for example) with a forumula that interacts with the external objects as a side-effect. In the following example, whenever our widget `answer` changes, for whatever reason, `this.element.textContent` will be updated:
+
+```
+class Widget {
+  constructor() {
+    // Set up external, non-rulfied object:
+    this.element = document.create('div');
+    this.parent.element.append(this.element);
+    // Once the external object is set up, demand our eager rule, just for effect:
+    this.update;
+  }
+  get answer() { // Produce whatever results we need.
+    return someComputationReferencingLotsOfStuff(....);
+  }
+  get update() { // Side-effect the external object, with info computed from our own rules.
+    this.element.textContent = this.answer;
+    return true; // A formula can return any value as along as it isn't 'undefined'.
+  }
+  destroy() { // Remove the widget from our application.
+    this.element.remove();    // Clean up the external object.
+    this.element = undefined; // Allow the external object to be garbage-collected.
+    this.update = undefined;  // Directly resetting our eager rule does NOT re-demand it.
+   }
+}
+Rule.rulify(Widget.prototype, {eagerNames: ['update']})
+```
+
+
 ## API
 
 ### ES6 Modules
@@ -473,6 +512,8 @@ Note, though, that because of memoization, this code will not not execute whatev
 
 - Currently, re-rulifying or re-attaching is not likely to work, nor is rulifying a class prototype after the first instance is created.
 
+- A demanded rule causes an additional "own property" to be added to object that begins with an underscore. E.g., if `anObject` has a rule named, `something`, after evaluating `anObject.something`, `Object.keys(anObject)` incudes `_something`, and `anObject.hasOwnProperty('_something') is true.
+
 ## Implementation
 
 Each Rule is an object that keeps track of:
@@ -502,7 +543,7 @@ During the computation of a formula, we also catch any references to a `Promise`
 
 Note that `.then` callbacks are never synchronous with fullfilment - they are always executed on a later tick. 
 
-An eager rule is simply one that demands itself on the next tick after being reset.
+An eager rule is simply one that demands itself on the next tick after being reset by a dependency. Here the implementation distinguishes between an explicit reset -- setting the value to undefined -- and one triggered by a resetting a dependency.
 
 ### Performance
 

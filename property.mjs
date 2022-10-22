@@ -39,7 +39,7 @@ export class Property extends Promisable {
     requires.forEach(required => required.usedBy = required.usedBy.filter(notUs));
   }
   
-  static attach(objectOrProto, key, methodOrInit, {configurable, enumerable, assignment = (value => value)} = {}) {
+  static attach(objectOrProto, key, methodOrInit, {assignment = (value => value), ...descriptors} = {}) {
     // Defines a Rule property on object, which may be an individual instance or a prototype.
     // If a method function is provided it is used to lazily calculate the value when read, if not already set.
     var ruleKey = '_' + key,
@@ -66,12 +66,15 @@ export class Property extends Promisable {
       //  for ruleKey (e.g., with a leading underscore), but I _think_ that Reflect.set then uses the default Object property assignment behavior,
       //  rather than the trap behavior of the instance===Proxy.
       Reflect.set(objectOrProto, ruleKey, rule, instance);
+      //let descriptor = Object.getOwnPropertyDescriptor(objectOrProto, key);
+      //descriptor.enumerable = true;
+      //Object.defineProperty(instance, key, {enumerable: true});
       return rule;
     };
     delete objectOrProto[ruleKey]; // attach clears any previous rule.
     return Object.defineProperty(objectOrProto, key, {
       // Within these functions, objectOrProto might not equal this, as objectOrProto could be a __proto__.
-      configurable, enumerable,
+      ...descriptors,
       // FIXME: is there some way to reset dependencies if someone explicitly deletes the property?
       // e.g., delete this[key]
       // TODO: Add a unit test that illustrates the behavior, and added to README.md#quirks
