@@ -1,6 +1,6 @@
 {
   "name": "@kilroy-code/rules",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Cached, demand-driven computations with dependency-directed-backtracking and full support for Promises.",
   "keywords": [
     "demand-driven",
@@ -12,7 +12,10 @@
   "scripts": {
     "test": "jasmine"
   },
-  "author": "howard@ki1r0y.com",
+  "author": {
+    "name": "Howard Stearns",
+    "email": "howard@ki1r0y.com"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -23,7 +26,7 @@
     "url": "https://github.com/kilroy-code/rules/issues"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
+    "registry": "https://npm.pkg.github.com/kilroy-code"
   },
   "devDependencies": {
     "jasmine": "^3.5.0"
