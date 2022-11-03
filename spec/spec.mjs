@@ -1,7 +1,7 @@
 /*global describe, it, require*/
 
 // Runs in NodeJS or browser, as long as we're in ES6. Otherwise, could just use Date.
-const perf = (typeof performance === 'undefined') ? (await import('perf_hooks')).performance : performance;
+const perf = (typeof performance !== 'undefined') ? performance : (await import('perf_hooks')).performance ;
 
 import { Rule } from '../index.mjs';
 
@@ -527,7 +527,7 @@ describe('A Rule', function () {
       // Initial version was 12 => 25. Second was 4-5 on Chrome.
       compare(evaluate, 'subsequentRuleMs', 9, 20);
     });
-    it('first computation after reset is never > 40x method and test will ski/warn if > 25x (see console).', function () {
+    it('first computation after reset is never > 40x method and test will skip/warn if > 25x (see console).', function () {
       // Factors on Intel Mac June '22:
       //   Chrome:  23 - Why is Chrome and Edge SLOWER after a reset? Breaks some optimization? Does that mean test is invalid?
       //   Edge:    32
@@ -540,7 +540,7 @@ describe('A Rule', function () {
       }
       compare(evaluateAndReset, 'initialExecutionAfterResetMs', 25, 40);
     });
-    it('of lazy creation of rule and tracked computation is never > 75x method (damn you Firefox!) and test will skip/warn if > 40x (see console).', function () {
+    it('of lazy creation of rule and tracked computation is never > 85x method (damn you Firefox!) and test will skip/warn if > 40x (see console).', function () {
       // Factors on Intel Mac June '22:
       //   Chrome:  15
       //   Edge:    20

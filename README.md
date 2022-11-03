@@ -90,7 +90,7 @@ Rules are the same, except for the last line above. A Rule would recompute the _
 
 That is, the code in a Rule (e.g., `return this.width * this.height`) defines how the system will compute the value of the property - unless your program assigns a different value. If you do assign a value, that value will be cached and used instead of the Rule's code. However, you can "reset" a Rule so that it goes back to using your program's code. This is done by assigning the Javascript value `undefined`. 
 
-This simplifies the interaction in a complex exploratory systems. The Rule defines the default behavior, and the application might show these computed values in an inspector. However, the application's inspector might allow the user to "override" the Rule and provide a value of their own, such as for _length_ in the example above. The inspector would then show the updated value for _area_. However, unlike a typical spreadsheet, you can bring back the Rule's formula code.
+This simplifies the interaction in complex exploratory systems. The Rule defines the default behavior, and the application might show these computed values in an inspector. However, the application's inspector might allow the user to "override" the Rule and provide a value of their own, such as for _length_ in the example above. The inspector would then show the updated value for _area_. However, unlike a typical spreadsheet, you can bring back the Rule's formula code.
 
 By the way, there is nothing wrong with having a Rule that refers to an ordinary Javascript property -- i.e., one that is not rulified. However, a Rule that does so will _not_ be reset when that property is changed. Rules can only track other Rules -- _**they cannot track changes in ordinary properties**_.
 
@@ -113,7 +113,7 @@ Computing area!
 6 
 ```
 
-Memoization is often used in applications for efficiency. While that doesn't seem very important in this toy example, it makes a big difference in complex applications in which it is not obvious when one computation will involve another, which involves another written by someone else, where that computation turns out to be expensive. Here, all Rules are memoized. (You can still use ordinary methods that are not Rules, and thus not memoized.)
+Memoization is often used in applications for efficiency. While that doesn't seem very important in this toy example, it makes a big difference in complex applications in which it is not obvious when one computation will involve another, perhaps written by someone else, and where that computation turns out to be expensive. Here, all Rules are memoized. (You can still use ordinary methods that are not Rules, and thus not memoized.)
 
 ### Demand-Driven Evaluation (aka Lazy Evaluation)
 
@@ -135,7 +135,7 @@ Computing Area
 ```
 Even after we computed _area_ once, by default it is not immediately recomputed when we assign a new value for _length_. However, once we then asked for _area_ it was computed again and the value cached.
 
-Imagine that you have a spreadsheet with some big table way out to the side offscreen, or on another sheet. Lazy evaluation means that these forumalae are not actually computed until they come into view -- unless something that _is_ in view depends on those other cells, in which case they _are_ automatically computed instead of giving an error. In any case, as a spreadsheet author you don't have to write any code to compute the other cells when they come into view, nor do you need to make sure that some part of it is computed when off screen because you need the answer in this other cell that is in view.
+Imagine that you have a spreadsheet with some big table way out to the side offscreen, or on another sheet. Lazy evaluation means that these formulae are not actually computed until they come into view -- unless something that _is_ in view depends on those other cells, in which case they _are_ automatically computed instead of giving an error. In any case, as a spreadsheet author you don't have to write any code to compute the other cells when they come into view, nor do you need to make sure that some part of it is computed when off screen because you need the answer in this other cell that is in view.
 
 Demand-driven evaluation is more than just an optimization. It is necessary for "turtles all the way down" systems, in which objects have behaviors that are themslves objects that have behaviors. It is fine for such objects to show their behavior objects when inspected by the user. But the system cannot cause them all to come into being when defined, because the initialization would never terminate.
 
@@ -149,7 +149,7 @@ As the system computes the Rule for our _area_, above, it keeps track of the oth
 
 Now, when something is assigned, such as _length_, above, the system goes back and resets all those Rules that have been demanded that immediately depend on _length_ for their own formula. This is automatically repeated for all of the Rules that depend on _those_ Rules, and so forth. 
 
-Note that _only_ the dependent rules are reset. For example, _width_ is not reset when _length_ is assigned, because _width_'s code doesn't depend at all on _length_. This is very different than a system that simply notes whether "anything at all has changed", and then recomputes _everything_.
+Note that _only_ the dependent rules are reset. For example, _width_ is not reset when _length_ is assigned, because _width_'s value doesn't depend at all on _length_. This is very different than a system that simply notes whether "anything at all has changed", and then recomputes _everything_.
 
 (If you're familiar with expert systems, you can think of the demand-driven evaluation of referenced Rules as "forward chaining", and the reset of all the dependent Rules as "backward chaining". Rules use both!)
 
@@ -159,10 +159,12 @@ A Rule can refer to non-Rule code that, in turn, refers to a Rule. That's fine, 
 
 If it helps to understand, the tracking is achieved by having Rule reference interact with an application-global stack of tracking machinery. This works because of two fundamentals of how Javascript works:
 
-- Each Javascript application module is effectively single-threaded for the application code. Rules are _not_ tracked between one Web page and another, or between a Web page and a Web worker.
-- Javascript modules (such as the Rules module) are only loaded once in application code, regardless of how many modules may load other modules that each load the Rules module. So there are no duplicates of the internal tracking machinery.
+- Each Javascript application is effectively single-threaded for the application code. Rules are _not_ tracked between one Web page and another, or between a Web page and a Web worker.
+- Javascript modules (such as the Rules module) are only loaded once in each application, regardless of how many modules may load other modules that each load the Rules module. So there are no duplicates of the internal tracking machinery.
 
 ### Components and `this`
+
+> _**This section is subject to change**_.
 
 One sometimes wants to define object instances of, e.g., a generic "game object", as a set of separately defined components. If the components are modeled as instances of a Javascript "class", then the special Javascript binding `this` will refer to the component, rather than to the whole "game object".
 
@@ -172,7 +174,7 @@ To accomodate such distinctions, the code for computing a Rule value is always p
 
 Note, however, that getter methods (preceded by `get` in the class definition) cannot take arguments. So if you want to pass an argument for `this` (that, self, etc.), do not use `get`. See [Rulify](#rulify)
 
-_(FIXME: give an example that shows where they can be different.)_
+> _(FIXME: give an example that shows where they can be different.)_
 
 
 ### Dynamic Attachment
@@ -186,7 +188,7 @@ Rule.attach(parent, 'reversedNames', (self) => self.children.reverse)
 ```
 This defines a new Rule on parent (or redefines an old one of the same name), accessed as `parent.reversedNames`. The function provides the default computed value.
 
-_(FIXME: add redefinition to test suite.)_
+> _(FIXME: add redefinition to test suite.)_
 
 ### POJOs
 
@@ -223,6 +225,8 @@ One consequence of this ability is that an application can add Rules to POJOs, w
 
 ### Arrays
 
+> _**This section is subject to change**_.
+
 Arrays can also be Rulified, so that each element acts like an object's property Rules.
 
 Consider the following example, as kind of a review of the above:
@@ -256,11 +260,11 @@ class Parent {
 var parent = new Parent();
 console.log(parent.names);  // A, B 
 
-parent.childA.name = 'C';
-console.log(parent.names);  // C, B
+parent.childA.name = 'AA';
+console.log(parent.names);  // AA, B
 
-parent.childB = new Child('D');
-console.log(parent.names);  // C, D
+parent.childB = new Child('BB');
+console.log(parent.names);  // AA, BB
 ```
 
 The Rule _names_ depends on _children_. In turn, the Rule _children_ depends on _childA_ and _childB_. Finally, _names_ also depends on the _name_ Rule of each child instance.  So naturally, when we assign new values to `parent.childA.name` or `parent.childB`, _names_ is recomputed.
@@ -270,8 +274,8 @@ All these references to Rules in other objects are perfectly fine and expected.
 However, the Array that is the value of _children_ also has properties, but they are not Rules, and so _Rules cannot track changes in them_. For example, consider `Array.prototype.length`:
 
 ```
-parent.children.push(new Child('E'));
-console.log(parent.names);  // C, D still! It does not include E!
+parent.children.push(new Child('C'));
+console.log(parent.names);  // AA, BB still! It does not include C!
 ```
 
 The Rules _names_ and _children_ cannot depend on the array _length_, and so _names_ does not get reset when _length_ is changed!
@@ -284,9 +288,9 @@ Fortunately, we can _rulify_ arrays just like we can rullify POJOs:
   }
 
 ```
-This converts length and each element of the array to a Rule, in which changes are tracked by other Rules. Now `parent.names` is properly updated to `C, D, E`.
+This converts length and each element of the array to a Rule, in which changes are tracked by other Rules. Now `parent.names` is properly updated to `AA, BB, C`.
 
-_I am considering additional magic. In particular, there are several methods on Array.prototype that use a function to create a new copied array. I would like for each of these methods on rulified arrays to automatically produce a new rulified array in which the formula for each element is based on the function given by the application. Thus if an individual element of the original rulified array is changed, then the corresponding element of the copy - and only that element - will be reset. Demanding that element will compute a new value by applying the original formula to the new element of the original rulified array. The motivation for this is that I would like to be able to replace a child element and have various mirrors or views of those children update only one element. This matters when the tree is deep and something near the top is replaced (e.g., with new code)._
+> _I am considering additional magic. In particular, there are several methods on Array.prototype that use a function to create a new copied array. I would like for each of these methods on rulified arrays to automatically produce a new rulified array in which the formula for each element is based on the function given by the application. Thus if an individual element of the original rulified array is changed, then the corresponding element of the copy - and only that element - will be reset. Demanding that element will compute a new value by applying the original formula to the new element of the original rulified array. The motivation for this is that I would like to be able to replace a child element and have various mirrors or views of those children update only one element. This matters when the tree is deep and something near the top is replaced (e.g., with new code). On the other hand, I'm not convinced that rulified arrays are important for my use cases at all._
 
 ### Promises and `async` Rules
 
@@ -383,6 +387,8 @@ Return an Array (actually, a Proxy to an Array) in which each element, and the l
 
 It is not specified whether changes to the returned value will effect the original `array`. (Currently, they do.)
 
+> _I'm not  sure that `enumerable` is meaningful or correct_.
+
 ### free
 
 `Rule.free(instance)`
@@ -446,7 +452,7 @@ class Callbacks {
 }
 Rule.rulify(Callbacks.prototype);
 ```
-If there is an assignment (including a reset) of _a_, then _data_ will correctly be recomputed because a was referenced dynamically within the Rule formula execution, where data is return. However, the callback happens later, while Rules are not being tracked. The Rule _b_ will therefore not be tracked as being required for _data_, and an assignment or reset of _b_ will not recompute the _data_.
+If there is an assignment (including a reset) of _a_, then _data_ will correctly be recomputed because _a_ was referenced dynamically within the Rule formula execution, where data is returned. However, the callback happens later, while Rules are not being tracked. The Rule _b_ will therefore not be tracked as being required for _data_, and an assignment or reset of _b_ will not recompute the _data_.
 
 The correct way to do this is to split the database operation into two Rules:
 

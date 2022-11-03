@@ -1,6 +1,6 @@
 {
   "name": "@kilroy-code/rules",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Cached, demand-driven computations with dependency-directed-backtracking and full support for Promises.",
   "keywords": [
     "demand-driven",
@@ -12,7 +12,7 @@
   "scripts": {
     "test": "jasmine"
   },
-  "author": "ki1r0y",
+  "author": "howard@ki1r0y.com",
   "license": "MIT",
   "repository": {
     "type": "git",
