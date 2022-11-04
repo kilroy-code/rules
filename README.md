@@ -1,8 +1,8 @@
 # Rules
 
-Rules keep track of each other, and update all and only those other Rules that need to be updated when something changes.
+Rules let the properties of Javascript instance work like the cells of a spreadsheet. The Rule/properties keep track of each other, and update all and only those other Rules that need to be updated when something changes.
 
-The cells in a spreadsheet work this way. You can write a value to a cell, and that value is remembered by the spreadsheet and displayed. Or you can write a formula that is used to compute the value of a cell, and that formula may use the value of other cells. When you change one of those referenced values, all of the formulae that depend on it are recomputed, and all of the formulae that depend on _those_, and so on.
+In a spreadsheet, you can write a value to a cell, and that value is remembered by the spreadsheet and displayed. Or you can write a formula that is used to compute the value of a cell, and that formula may use the value of other cells. When you change one of those referenced values, all of the formulae that depend on it are recomputed, and all of the formulae that depend on _those_, and so on.
 
 Rules are exactly the same thing, but can be used in any Javascript program. A Rule is like a cell in a spreadsheet, and the code in the Rule is like the formula.
 
@@ -21,7 +21,7 @@ This README includes:
 ## Introduction
 ### Example
 
-There are many ways to define Rules. One way is with ordinary classes:
+There are many ways to define Rules. One way is with "getters" in ordinary classes:
 
 ```
 class Box {
