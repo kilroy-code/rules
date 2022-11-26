@@ -1,12 +1,14 @@
 {
   "name": "@kilroy-code/rules",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Cached, demand-driven computations with dependency-directed-backtracking and full support for Promises.",
   "keywords": [
     "demand-driven",
     "memoize",
     "dependency-directed-backtracking",
-    "promises"
+    "promises",
+    "nodejs",
+    "browser"
   ],
   "main": "index.js",
   "scripts": {
@@ -29,6 +31,6 @@
     "registry": "https://npm.pkg.github.com/kilroy-code"
   },
   "devDependencies": {
-    "jasmine": "^3.5.0"
+    "jasmine": "^4.5.0"
   }
 }

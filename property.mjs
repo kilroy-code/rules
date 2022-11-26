@@ -38,12 +38,15 @@ export class Property extends Promisable {
     // Remove us from usedBy of everything that we had required.
     requires.forEach(required => required.usedBy = required.usedBy.filter(notUs));
   }
+
+  static ruleKey(key) { return '_' + key; }
+  static getRule(object, key) { return object[this.ruleKey(key)]; }
   
-  static attach(objectOrProto, key, methodOrInit, {assignment = (value => value), ...descriptors} = {}) {
+  static attach(objectOrProto, key, methodOrInit, {assignment = (value => value), enumerable = true, ...descriptors} = {}) {
     // Defines a Rule property on object, which may be an individual instance or a prototype.
     // If a method function is provided it is used to lazily calculate the value when read, if not already set.
-    var ruleKey = '_' + key,
-        methodKey = '_' + ruleKey,
+    var ruleKey = '_' + key, // Why does it take so much longer to do: this.ruleKey(key),
+        methodKey = '__' + key,
         isMethod = methodOrInit instanceof Function,
         method = isMethod ? methodOrInit : undefined,
         init = isMethod ? undefined : methodOrInit;
@@ -66,6 +69,7 @@ export class Property extends Promisable {
       //  for ruleKey (e.g., with a leading underscore), but I _think_ that Reflect.set then uses the default Object property assignment behavior,
       //  rather than the trap behavior of the instance===Proxy.
       Reflect.set(objectOrProto, ruleKey, rule, instance);
+      Object.defineProperty(instance, ruleKey, {enumerable: false});
       //let descriptor = Object.getOwnPropertyDescriptor(objectOrProto, key);
       //descriptor.enumerable = true;
       //Object.defineProperty(instance, key, {enumerable: true});
@@ -74,7 +78,7 @@ export class Property extends Promisable {
     delete objectOrProto[ruleKey]; // attach clears any previous rule.
     return Object.defineProperty(objectOrProto, key, {
       // Within these functions, objectOrProto might not equal this, as objectOrProto could be a __proto__.
-      ...descriptors,
+      enumerable, ...descriptors,
       // FIXME: is there some way to reset dependencies if someone explicitly deletes the property?
       // e.g., delete this[key]
       // TODO: Add a unit test that illustrates the behavior, and added to README.md#quirks
