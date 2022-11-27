@@ -1,7 +1,8 @@
 /*global describe, it, require*/
 
 // Runs in NodeJS or browser, as long as we're in ES6. Otherwise, could just use Date.
-const perf = (typeof performance !== 'undefined') ? performance : (await import('perf_hooks')).performance ;
+import { performance } from '../../utilities/performance.mjs';
+import { delay } from '../../utilities/delay.mjs';
 
 import { Rule } from '../index.mjs';
 
@@ -485,6 +486,9 @@ describe('A Rule', function () {
     });
   });
   describe('timing', function () {
+    beforeEach(async function () {
+      await delay(2e3); // Allow garbage collection, because, e.g., Firefox.
+    });
     class TimingExample {
       someValue() {
         return Math.sqrt(Math.sqrt(Math.sqrt(100)));
@@ -498,11 +502,11 @@ describe('A Rule', function () {
           methods = Array.from({length: cycles}, () => new UnrulifiedExample()),
           rules = Array.from({length: cycles}, () => new RulifiedExample());
       prep(methods, rules);
-      let start = perf.now(),
+      let start = performance.now(),
           methodSum = methods.reduce((sum, instance) => sum + instance.someValue(), 0),
-          mid = perf.now(),
+          mid = performance.now(),
           ruleSum = rules.reduce((sum, instance) => sum + instance.someValue, 0),
-          end = perf.now(),
+          end = performance.now(),
           method = mid - start,
           rule = end - mid,
           factor = rule / method,
@@ -514,7 +518,7 @@ describe('A Rule', function () {
       expect(methodSum).toBe(ruleSum);
       if (warn && !error) pending(`${factor.toPrecision(2)}x`);
     }
-    it('referencing a computed method (with tracking) is never > 20x method and test will skip/warn if > 9x (see console)', function () {
+    it('referencing a computed method (with tracking) is never > 25x method and test will skip/warn if > 5x (see console)', function () {
       function evaluate(methods, rules) {
         methods.forEach(element => element.someValue());
         rules.forEach(element => element.someValue);
@@ -522,12 +526,12 @@ describe('A Rule', function () {
       // Factors on Intel Mac June '22:
       //   Chrome:  2
       //   Edge:    3
-      //   Firefox: 8
       //   Safari: 18
+      //   Firefox:20
       // Initial version was 12 => 25. Second was 4-5 on Chrome.
-      compare(evaluate, 'subsequentRuleMs', 9, 20);
+      compare(evaluate, 'subsequentRuleMs', 5, 25);
     });
-    it('first computation after reset is never > 40x method and test will skip/warn if > 25x (see console).', function () {
+    it('first computation after reset is never > 45x method and test will skip/warn if > 20x (see console).', function () {
       // Factors on Intel Mac June '22:
       //   Chrome:  23 - Why is Chrome and Edge SLOWER after a reset? Breaks some optimization? Does that mean test is invalid?
       //   Edge:    32
@@ -538,20 +542,19 @@ describe('A Rule', function () {
         rules.forEach(element => element.someValue);   // Instantiate the rule...
         rules.forEach(element => element.someValue = undefined); // ... but then reset it so that it needs to compute.
       }
-      compare(evaluateAndReset, 'initialExecutionAfterResetMs', 25, 40);
+      compare(evaluateAndReset, 'initialExecutionAfterResetMs', 20, 45);
     });
-    it('of lazy creation of rule and tracked computation is never > 85x method (damn you Firefox!) and test will skip/warn if > 40x (see console).', function () {
+    it('of lazy creation of rule and tracked computation is never > 100x method (damn you Firefox!) and test will skip/warn if > 30x (see console).', async function () {
       // Factors on Intel Mac June '22:
       //   Chrome:  15
       //   Edge:    20
       //   Safari:  38
-      //   Firefox: 75
-      // Initial version was typically 25-30 and never over 40, except Firefox near 100.
+      //   Firefox: 85
       function justTouch(methods, rules) { // Does not demand rule, so these instances do not have the rule instantiated yet.
         methods.forEach(element => element);
         rules.forEach(element => element);
       }
-      compare(justTouch, 'initialLazyRuleInvocationMs', 40, 85);
+      compare(justTouch, 'initialLazyRuleInvocationMs', 30, 100);
     });
   });
   describe('using this and self', function () {
@@ -842,7 +845,7 @@ expensive compute b`);
       });
     });
     it('resolves to the actual value when the delayed promise resolves.', (done) => {
-      Rule.attach(that, 'explicitDelayedPromise', () => new Promise(resolve => setTimeout(() => resolve(3), 0)));
+      Rule.attach(that, 'explicitDelayedPromise', () => delay(0, 3));
       that.explicitDelayedPromise.then(() => {
         expect(that.explicitDelayedPromise).toBe(3);
         done();
@@ -1020,9 +1023,9 @@ expensive compute b`);
           properties and any eager dependents resolve individually.
 	*/
         class RandomPromises {
-          get p1() { return new Promise(resolve => setTimeout(() => resolve(1), Math.random() * 10)); }
-          get p2() { return new Promise(resolve => setTimeout(() => resolve(2), Math.random() * 10)); }
-          get p3() { return new Promise(resolve => setTimeout(() => resolve(3), Math.random() * 10)); }
+          get p1() { return delay(Math.random() * 10, 1); }
+          get p2() { return delay(Math.random() * 10, 2); }
+          get p3() { return delay(Math.random() * 10, 3); }
         }
         Rule.rulify(RandomPromises.prototype);
         it('a value that produces values dependent on these, will not resolve until all are ready', async function () {
