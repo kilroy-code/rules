@@ -32,6 +32,6 @@
   },
   "devDependencies": {
     "jasmine": "^4.5.0",
-    "@kilroy-code/utils": "^1.0.2"
+    "@kilroy-code/utilities": "^1.0.2"
   }
 }
