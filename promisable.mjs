@@ -66,7 +66,11 @@ export class Promisable extends Tracked {
     // (IWBNI we did this in a way that produced less garbage.)
     let usedBy = [],
         add1 = (rule) => {
-          if (rule !== this) usedBy.push({rule, placeholder: rule.placeholderPromiseResolvers});
+	  // However, the dependency may have already been resolved, by being a deep dependency of a promise that we require.
+	  // We do want to make sure deep dependencies get resolved (hence this deep collection), but we do NOT want to reset/compute twice.
+	  // So do NOT accumulate if there is no placeholder left at at this point.
+	  const placeholder = rule.placeholderPromiseResolvers;
+          if (rule !== this && placeholder) usedBy.push({rule, placeholder});
           rule.usedBy.forEach(add1);
         };
     add1(this);
@@ -79,7 +83,7 @@ export class Promisable extends Tracked {
     usedBy.forEach(({rule}) => rule.reset()); // Reset 'em all, so that dependencies can be gathered.
     usedBy.forEach(({rule, placeholder}) => { // Demand each, and resolve as possible.
       let value = rule.get(rule.instance, rule.key);
-      if (!placeholder || (value === undefined)) return;
+      if (value === undefined) return;
       placeholder.resolve(value);
     });
   }

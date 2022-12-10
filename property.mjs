@@ -69,7 +69,7 @@ export class Property extends Promisable {
       //  for ruleKey (e.g., with a leading underscore), but I _think_ that Reflect.set then uses the default Object property assignment behavior,
       //  rather than the trap behavior of the instance===Proxy.
       Reflect.set(objectOrProto, ruleKey, rule, instance);
-      Object.defineProperty(instance, ruleKey, {enumerable: false});
+      //Object.defineProperty(instance, ruleKey, {enumerable: false}); // Doesn't really accomplish anything for us when objectOrProto is a prototype.
       //let descriptor = Object.getOwnPropertyDescriptor(objectOrProto, key);
       //descriptor.enumerable = true;
       //Object.defineProperty(instance, key, {enumerable: true});

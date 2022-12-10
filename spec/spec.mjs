@@ -518,7 +518,7 @@ describe('A Rule', function () {
       expect(methodSum).toBe(ruleSum);
       if (warn && !error) pending(`${factor.toPrecision(2)}x`);
     }
-    it('referencing a computed method (with tracking) is never > 25x method and test will skip/warn if > 5x (see console)', function () {
+    it('referencing a computed method (with tracking) is never > 60x method and test will skip/warn if > 5x (see console)', function () {
       function evaluate(methods, rules) {
         methods.forEach(element => element.someValue());
         rules.forEach(element => element.someValue);
@@ -529,9 +529,9 @@ describe('A Rule', function () {
       //   Safari: 18
       //   Firefox:20
       // Initial version was 12 => 25. Second was 4-5 on Chrome.
-      compare(evaluate, 'subsequentRuleMs', 5, 25);
+      compare(evaluate, 'subsequentRuleMs', 5, 60);
     });
-    it('first computation after reset is never > 45x method and test will skip/warn if > 20x (see console).', function () {
+    it('first computation after reset is never > 120x method and test will skip/warn if > 25x (see console).', function () {
       // Factors on Intel Mac June '22:
       //   Chrome:  23 - Why is Chrome and Edge SLOWER after a reset? Breaks some optimization? Does that mean test is invalid?
       //   Edge:    32
@@ -542,9 +542,9 @@ describe('A Rule', function () {
         rules.forEach(element => element.someValue);   // Instantiate the rule...
         rules.forEach(element => element.someValue = undefined); // ... but then reset it so that it needs to compute.
       }
-      compare(evaluateAndReset, 'initialExecutionAfterResetMs', 20, 45);
+      compare(evaluateAndReset, 'initialExecutionAfterResetMs', 25, 120);
     });
-    it('of lazy creation of rule and tracked computation is never > 100x method (damn you Firefox!) and test will skip/warn if > 30x (see console).', async function () {
+    it('of lazy creation of rule and tracked computation is never > 110x method and test will skip/warn if > 55x (see console).', async function () {
       // Factors on Intel Mac June '22:
       //   Chrome:  15
       //   Edge:    20
@@ -554,7 +554,7 @@ describe('A Rule', function () {
         methods.forEach(element => element);
         rules.forEach(element => element);
       }
-      compare(justTouch, 'initialLazyRuleInvocationMs', 30, 100);
+      compare(justTouch, 'initialLazyRuleInvocationMs', 55, 110);
     });
   });
   describe('using this and self', function () {
@@ -973,6 +973,19 @@ expensive compute b`);
           expect(g).toBe(6);        
           done();
         });
+      });
+      it('in a deep chain of promises, we do not re-evalate after dependencies are known.', async function () {
+	let bComputed = 0,
+	    cComputed = 0,
+	    that = {
+	      get a() { return Promise.resolve(1); },
+	      get b() { let a = this.a; bComputed++; return this.a; },
+	      get c() { let b = this.b; cComputed++; return b; }
+	    };
+	Rule.rulify(that);
+	expect(await that.c).toBe(1);
+	expect(bComputed).toBe(1);
+	expect(cComputed).toBe(1); // Once upon a time, the implementation evaluated c twice.
       });
     });
     it('when chained to other rulified objects with promises will resolve in a rule.', done => {

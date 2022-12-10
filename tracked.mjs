@@ -19,6 +19,7 @@ export class Tracked extends BaseRule {
     this.resetReferences();
   }
   addReferenceIfNew(reference) { // Used by RuleStack
+    // TODO: how much is this costing us? Should we use a Set?
     if (reference.usedBy.includes(this)) return; // Just once, please
     this.addReference(reference);
   }
