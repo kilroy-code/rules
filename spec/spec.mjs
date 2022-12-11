@@ -1,8 +1,8 @@
 /*global describe, it, require*/
 
 // Runs in NodeJS or browser, as long as we're in ES6. Otherwise, could just use Date.
-import { performance } from '../../utilities/performance.mjs';
-import { delay } from '../../utilities/delay.mjs';
+import { performance } from '@kilroy-code/utilities/performance.mjs';
+import { delay } from '@kilroy-code/utilities/delay.mjs';
 
 import { Rule } from '../index.mjs';
 
