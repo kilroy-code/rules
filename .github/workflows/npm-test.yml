@@ -22,6 +22,6 @@ jobs:
       - name: Install dependencies
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: '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'
+          NODE_AUTH_TOKEN: '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'
         run: npm install
       - run: npm test
