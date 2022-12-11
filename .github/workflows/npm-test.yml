@@ -18,8 +18,10 @@ jobs:
           node-version: '18.x'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@kilroy-code'
+	  always-auth: true
       - name: Install dependencies
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+	  NODE_AUTH_TOKEN: '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'
         run: npm install
       - run: npm test
