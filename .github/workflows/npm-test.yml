@@ -25,5 +25,5 @@ jobs:
       - name: Install dependencies
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
-        run: npm ci
+        run: npm i
       - run: npm test
