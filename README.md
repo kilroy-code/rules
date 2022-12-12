@@ -1,4 +1,4 @@
-# Rules
+# Rules [![npm test](https://github.com/kilroy-code/rules/actions/workflows/npm-test.yml/badge.svg)](https://github.com/kilroy-code/rules/actions/workflows/npm-test.yml)
 
 Rules let the properties of Javascript instance work like the cells of a spreadsheet. The Rule/properties keep track of each other, and update all and only those other Rules that need to be updated when something changes.
 
