@@ -184,7 +184,7 @@ An ordinary property can be created simply by assigning a value, or by using `Ob
 We can also dynamically attach Rules to existing instantiated objects:
 
 ```
-Rule.attach(parent, 'reversedNames', (self) => self.children.reverse)
+Rule.attach(parent, 'reversedNames', (self) => self.names.reverse)
 ```
 This defines a new Rule on parent (or redefines an old one of the same name), accessed as `parent.reversedNames`. The function provides the default computed value.
 
@@ -317,7 +317,7 @@ Rule.rulify(Widget.prototype);
 ```
 Note that none of the Rule code does anything at all with `async` or `await`. It does not need to. An application that uses this, e.g., to display an inspector of _Widgets_, could show Promise values as `...`, and then show the resolved value. But neither the author of the UI, nor the author of the _Widget_ Rules, needs to know anything about the internals of which Widget rules might temporarily be a `Promise` vs which do not.
 
-This is very convenient, especially when working with code produced by others with which you are not familiar or which may be changing -- including code that is changing as you use it! But there is an important reason for it beyond convenience. In some systems, particularly distributed systems, it is very important that the system (or some well-defined portion of the system) produce deterministically identical results on different computers. This is difficult when some results involve user interactions and communications over the network (which may take different amounts of time for different users). When combined with memoization, above, the magic resolution of `Promises` makes it practical to write a system in which a Rules resolved value is the same on each system regardless of how long things took, or what order the dependents were computed in. (This is assuming that the Rules do not depend on side effects, such as incrementing a set of order-dependent counters, or providing different asynchronous networked answers for different users.)
+This is very convenient, especially when working with code produced by others with which you are not familiar or which may be changing -- including code that is changing as you use it! But there is an important reason for it beyond convenience. In some systems, particularly distributed systems, it is very important that the system (or some well-defined portion of the system) produce deterministically identical results on different computers. This is difficult when some results involve user interactions and communications over the network (which may take different amounts of time for different users). When combined with memoization, above, the magic resolution of `Promises` makes it practical to write a system in which a Rule's resolved value is the same on each system regardless of how long things took, or what order the dependents were computed in. (This is assuming that the Rules do not depend on side effects, such as incrementing a set of order-dependent counters, or providing different asynchronous networked answers for different users.)
 
 ### Eager Rules
 
