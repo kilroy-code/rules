@@ -15,12 +15,12 @@ describe('A Rule', function () {
       box.length = 5;
       expect(box.length).toBe(5);
       box.width = 7;
-      Rule.attach(box, 'area', function (self) { return self.width * self.length; });
+      Rule.attach(box, 'area', function () { return this.width * this.length; });
       expect(box.area).toBe(35);
       expect(box.area).toBe(35);
       Rule.attach(box, 'height');
       box.height = 2
-      Rule.attach(box, 'volume', function (self) { return self.area * self.height; });
+      Rule.attach(box, 'volume', function () { return this.area * this.height; });
       expect(box.volume).toBe(70);
       box.length = 6;
       expect(box.area).toBe(42);
@@ -35,10 +35,10 @@ describe('A Rule', function () {
       class Rectangle {}
       Rule.attach(Rectangle.prototype, 'width');
       Rule.attach(Rectangle.prototype, 'length');
-      Rule.attach(Rectangle.prototype, 'area', function (self) { return self.width * self.length; });
+      Rule.attach(Rectangle.prototype, 'area', function () { return this.width * this.length; });
       class Box extends Rectangle { }
       Rule.attach(Box.prototype, 'height');
-      Rule.attach(Box.prototype, 'volume', function (self) { return self.area * self.height; });
+      Rule.attach(Box.prototype, 'volume', function () { return this.area * this.height; });
       var box = new Box();
       box.length = 5;
       expect(box.length).toBe(5);
@@ -84,7 +84,7 @@ describe('A Rule', function () {
     });
     it('delays calculation and storage of state until used, allowing use on class prototype', function () {
       class MyClass {}
-      Rule.attach(MyClass.prototype, 'myRule', () => 17);
+      Rule.attach(MyClass.prototype, 'myRule', function() {return 17;});
       var instance1 = new MyClass();
       expect(instance1.myRule).toBe(17);
       instance1.myRule = 42;
@@ -132,22 +132,81 @@ describe('A Rule', function () {
       expect(sub.bar).toBe(21);
       expect(subsub.bar).toBe(21);
     });
+    describe('with cooperating meta-circular definitions.', function () {
+      class Triangle {
+        get hypotenuse() { return Math.sqrt(this.a * this.a + this.b * this.b); }
+        get a() { return Math.sqrt(this.hypotenuse * this.hypotenuse - this.b * this.b); }
+        get b() { return Math.sqrt(this.hypotenuse * this.hypotenuse - this.a * this.a); }
+      }
+      Rule.rulify(Triangle.prototype);
+      it('are lazy.', function () {
+        expect(() => new Triangle()).not.toThrow();
+      });
+      it('is indeed circular if nothing set.', function () {
+        let triangle = new Triangle();
+        expect(() => triangle.hypotenuse).toThrow();
+      });
+      it('works if "enough" are specified.', function () {
+        let triangle = new Triangle();
+        triangle.a = 3;
+        triangle.hypotenuse = 5;
+        expect(triangle.b).toBe(4);
+      });
+    });
+    describe('with multiple inheritance mechanisms', function () {
+      class Parented { // For this test, we don't need child slots, just the parent.
+        get parent() { return null; }
+      }
+      class Assembly extends Parented {
+        get length() { return this.parent.length; }
+        get width() { return this.parent.width; }
+        get height() { return this.parent.height; }
+      }
+      [Parented, Assembly].forEach(kind => Rule.rulify(kind.prototype));
+      let grandparent = new Assembly(),
+          parent = new Assembly(),
+          child = new Assembly(),
+          stepParent = new Assembly();
+      grandparent.length = grandparent.width = 40;
+      grandparent.height = 10;
+      stepParent.height = stepParent.length = stepParent.width = 20;
+      child.parent = parent;
+      parent.parent = grandparent;
+      parent.width = 10;
+      it('includes kind-of inheritance.', function () {
+        expect(child.parent).toBe(parent);
+        expect(parent.parent).toBe(grandparent);
+        expect(grandparent.parent).toBe(null);
+        expect(stepParent.parent).toBe(null);
+      });
+      it('includes part-whole inheritance.', function () {
+        expect(child.height).toBe(10);
+        expect(child.width).toBe(10);
+        expect(child.length).toBe(40);
+        parent.width = undefined;
+        expect(child.width).toBe(40);
+        child.parent = stepParent;
+        expect(child.width).toBe(20);
+        expect(child.height).toBe(20);
+        expect(child.length).toBe(20);
+      });
+    });
   });
   describe('method', function () {
-    function calculator(self) { self.callCount++; return 1 + 2;}
-    function calculatorOnProperty(self) { return self.ordinaryProperty + 2; }
-    function calculatorOnRule(self) { return self.ordinaryProperty + self.calculator; }
-    function conditionalCalculator(self) { self.callCount++; return (self.calculator < 10) ? self.calculator : self.calculatorOnRule }
+    function calculator() { this.callCount++; return 1 + 2;}
+    function calculatorOnProperty() { return this.ordinaryProperty + 2; }
+    function calculatorOnRule() { return this.ordinaryProperty + this.calculator; }
+    function conditionalCalculator() { this.callCount++; return (this.calculator < 10) ? this.calculator : this.calculatorOnRule }
     function testAnInstance(attachee, anInstance, label) {
       describe(label, () => {
         Rule.attach(attachee, 'calculator', calculator);
         Rule.attach(attachee, 'calculatorOnProperty', calculatorOnProperty);
         Rule.attach(attachee, 'calculatorOnRule', calculatorOnRule);
         Rule.attach(attachee, 'conditionalCalculator', conditionalCalculator);
-        Rule.attach(attachee, 'aCircular', (self) => self.bCircular);
-        Rule.attach(attachee, 'bCircular', (self) => self.cCircular);
-        Rule.attach(attachee, 'cCircular', (self) => self.aCircular);
-        Rule.attach(attachee, 'returnsNothing', () => { anInstance.callCount++; });
+        Rule.attach(attachee, 'aCircular', function() {return this.bCircular;});
+        Rule.attach(attachee, 'bCircular', function() {return this.cCircular;});
+        Rule.attach(attachee, 'cCircular', function() {return this.aCircular;});
+        Rule.attach(attachee, 'returnsNothing', function() {return anInstance.callCount++;});
         beforeEach(() => {
           anInstance.ordinaryProperty = 2;
           anInstance.calculator = undefined;
@@ -211,12 +270,12 @@ describe('A Rule', function () {
     testAnInstance(Something.prototype, new Something(), 'on a class instance');
   });
   describe('tracking dependencies', function () {
-    function aPlus1(self) { return self.a + 1; }
-    function bPlus1(self) { return self.b + 1; }
-    function requiredPlus1(self) { return self.required + 1; }
-    function requiredPlus2(self) { return self.required + 2; }
-    function dependant1Plus10(self) { return self.dependant1 + 10; }
-    function dependant1Plus20(self) { return self.dependant1 + 20; }
+    function aPlus1() { return this.a + 1; }
+    function bPlus1() { return this.b + 1; }
+    function requiredPlus1() { return this.required + 1; }
+    function requiredPlus2() { return this.required + 2; }
+    function dependant1Plus10() { return this.dependant1 + 10; }
+    function dependant1Plus20() { return this.dependant1 + 20; }
     function testAnInstance(that) {
       it('will recompute the last of a chain of three when the middle is reset, and then not again when the first is later reset', function () {
         that.a = 1;
@@ -316,7 +375,7 @@ describe('A Rule', function () {
         expect(other.dependant).toBe('got compiled override');
       });
       it('follow attached override', function () {
-        Rule.attach(example, 'theRule', () => other.dependant);
+        Rule.attach(example, 'theRule', function() {return other.dependant;});
         expect(example.theRule).toBe('got compiled override');
         expect(example.dependant).toBe('got got compiled override');
 
@@ -368,43 +427,38 @@ describe('A Rule', function () {
 	class Callbacks {
           a() { return 1; }
           b() { return 2; }
-	  // In much of the following, we use callbacks in typical old-school NodeJS style, defined with function (...) { },
-	  // rather than fat arrow. That means that we can't use 'this' to refer to the instance.
-	  // That's fine, we can use the convenience argument 'self'. HOWEVER, getters cannot take arguments,
-	  // so we cannot decoarate these methods with 'get'. That's also fine, as Rule.rulify will automatically
-	  // rulify all the methods (except the constructor) IFF there are not getters in the class definition.
-          noPromise(self) {
-            var a = self.a;
+          noPromise() {
+            var a = this.a;
             var container = [];
-            fetchFromDatabase(a, function (error, dbValue) {
+            fetchFromDatabase(a, (error, dbValue) => {
               if (error) throw error;
-              container[0] = dbValue + a + self.b;
+              container[0] = dbValue + a + this.b;
             });
             return container;
           }
-          wrongResult(self) {
-            return self.noPromise[0] || 'none';
+          wrongResult() {
+            return this.noPromise[0] || 'none';
           }
-          promiseButStillWrong(self) {
-            var a = self.a;
-            return new Promise(function (resolve, reject) {
-              fetchFromDatabase(a, function (error, dbValue) {
+          promiseButStillWrong() {
+            var a = this.a;
+            return new Promise((resolve, reject) => {
+              fetchFromDatabase(a, (error, dbValue) => {
                 if (error) reject(error);
-                resolve(dbValue + a + self.b);
+                resolve(dbValue + a + this.b);
               });
             });
           }
-          onlyTracksSome(self) { return self.promiseButStillWrong; }
-          dbValue(self) {
-            return new Promise(function (resolve, reject) {
-              fetchFromDatabase(self.a, function (error, dbValue) {
+          onlyTracksSome() { return this.promiseButStillWrong; }
+          dbValue() {
+            return new Promise((resolve, reject) => {
+              fetchFromDatabase(this.a, (error, dbValue) => {
                 if (error) reject(error);
                 resolve(dbValue);
               });
             });
           }
-          computationOnDbValue(self) {
-            return self.dbValue + self.a + self.b;
+          computationOnDbValue() {
+            return this.dbValue + this.a + this.b;
           }
         }
         Rule.rulify(Callbacks.prototype);
@@ -558,7 +612,11 @@ describe('A Rule', function () {
     });
   });
   describe('using this and self', function () {
-    it('has the same for both by default, with choice being a matter of style', function () {
+    // It can be convenient to see the instance as a parameter with a name of your own choosing.
+    // It's a one-word difference to implment, and no significant performance penalty. (And that only on computation, rather than on cached values.)
+    // Even so, is it worth it? There are is already a lot of flexibility with function vs =>, and doing things like `let this = that;`.
+    // Is it worth confusing the issue even more? Then again, people might find the user-named variable to be the least confusing of all.
+    it('is the same, with choice being a matter of style', function () {
       var that = {};
       Rule.attach(that, 'functionThis', function () {
         return this;
@@ -585,14 +643,14 @@ describe('A Rule', function () {
     it("does not track a ref'd var", () => {
       var a = 1, b = 2
       var pojo = {};
-      Rule.attach(pojo, 'sum', () => a + b);
+      Rule.attach(pojo, 'sum', function() {return a + b;});
       expect(pojo.sum).toEqual(3);
       a = 2; // Not a Rule. Change not tracked.
       expect(pojo.sum).not.toEqual(4);
     });
     it("does not track a ref'd property", () => {
       var pojo = {a: 1, b: 2};
-      Rule.attach(pojo, 'sum', self => self.a + self.b);
+      Rule.attach(pojo, 'sum', function() {return this.a + this.b;});
       expect(pojo.sum).toEqual(3);
       pojo.a = 2; // Not a Rule. Change not tracked.
       expect(pojo.sum).not.toEqual(4);
@@ -600,7 +658,7 @@ describe('A Rule', function () {
     it("does not track a ref'd array cell", () => {
       var list = [1, 2],
           other = {}; // so as not to mess up list.length
-      Rule.attach(other, 'sum', () => list.reduce((a, e) => a + e));
+      Rule.attach(other, 'sum', function() {return list.reduce((a, e) => a + e); });
       expect(other.sum).toEqual(3);
       list[0] = 2; // Not a Rule. Change not tracked.
       expect(other.sum).not.toEqual(4);
@@ -609,7 +667,7 @@ describe('A Rule', function () {
       var pojo = {a: 1, b: 2},
           other = {};
       Rule.rulify(pojo);
-      Rule.attach(pojo, 'sum', self => self.a + self.b);
+      Rule.attach(pojo, 'sum', function() {return this.a + this.b; });
       expect(pojo.sum).toEqual(3);
       pojo.a = 2;
       expect(pojo.sum).toEqual(4);
@@ -618,7 +676,7 @@ describe('A Rule', function () {
       var nakedList = [1, 2],
           list = Rule.rulify(nakedList),
           other = {};
-      Rule.attach(other, 'sum', () => list.reduce((a, e) => a + e));
+      Rule.attach(other, 'sum', function() {return list.reduce((a, e) => a + e);});
       expect(other.sum).toBe(3);
 
       list[0] = 2; // change of list resets sum
@@ -640,8 +698,8 @@ describe('A Rule', function () {
     it("supports a recursive idiom", () => {
       var component = Rule.rulify({
         list: Rule.rulify([1, 2]),  // If you want the list (or an object) to be be rulified, you need to do it yourself.
-        sum: self => self.list.reduce((a, e) => a + e),
-        plus1: self => self.list.map(e => e + 1)
+        sum: function() { return this.list.reduce((a, e) => a + e); },
+        plus1: function() { return this.list.map(e => e + 1); }
       });
       expect(component.sum).toEqual(3);
       expect(component.plus1[0]).toEqual(2);
@@ -658,9 +716,9 @@ describe('A Rule', function () {
       var counts = [0, 0, 0],
           component = Rule.rulify({
             list: Rule.rulify(['a', 'b', 'c']),
-            ref0: () => ref(0),
-            ref1: () => ref(1),
-            ref2: () => ref(2)
+            ref0: function() {return ref(0);},
+            ref1: function() {return ref(1);},
+            ref2: function() {return ref(2);}
           });
       expect(component.ref0).toBe('a');
       expect(component.ref1).toBe('b');
@@ -792,8 +850,8 @@ expensive compute b`);
       let thing = {
         nakedList: function () { return [0, 1, 2]; }, // Appearing in rule does not (currently) rulfify the value.
         rulifiedList: function () { return Rule.rulify([0, 1, 2]); }, // An array must be explicitly rulified.
-        refNakedElement: function (self) { return self.nakedList[1]; },
-        refRulifiedElement: function (self) { return self.rulifiedList[1]; }
+        refNakedElement: function () { return this.nakedList[1]; },
+        refRulifiedElement: function () { return this.rulifiedList[1]; }
       };
       Rule.rulify(thing);
       expect(thing.refNakedElement).toBe(1);
@@ -810,8 +868,8 @@ expensive compute b`);
       let thing = {
         nakedList: function () { return [0, 1, 2]; }, // Appearing in rule does not (currently) rulfify the value.
         rulifiedList: function () { return Rule.rulify([0, 1, 2]); }, // An array must be explicitly rulified.
-        refNakedList: function (self) { return self.nakedList.reduce((sum, element) => sum + element, 0); },
-        refRulifiedList: function (self) { return self.rulifiedList.reduce((sum, element) => sum + element, 0); }
+        refNakedList: function () { return this.nakedList.reduce((sum, element) => sum + element, 0); },
+        refRulifiedList: function () { return this.rulifiedList.reduce((sum, element) => sum + element, 0); }
       };
       Rule.rulify(thing);
       expect(thing.refNakedList).toBe(3);
@@ -838,29 +896,29 @@ expensive compute b`);
   describe('with Promises', function () {
     var that = {};
     it('resolves to the actual value when the promise resolves.', (done) => {
-      Rule.attach(that, 'explicitPromise', () => Promise.resolve(3));
+      Rule.attach(that, 'explicitPromise', function() {return Promise.resolve(3);});
       that.explicitPromise.then(() => {
         expect(that.explicitPromise).toBe(3);
         done();
       });
     });
     it('resolves to the actual value when the delayed promise resolves.', (done) => {
-      Rule.attach(that, 'explicitDelayedPromise', () => delay(0, 3));
+      Rule.attach(that, 'explicitDelayedPromise', function() {return delay(0, 3);});
       that.explicitDelayedPromise.then(() => {
         expect(that.explicitDelayedPromise).toBe(3);
         done();
       });
     });
     it('is still initially a promise that then becomes the value, if the rule is an immediately resolved promise.', (done) => {
-      Rule.attach(that, 'immediatePromise', () => Promise.resolve(3));
+      Rule.attach(that, 'immediatePromise', function() {return Promise.resolve(3);});
       that.immediatePromise.then(() => {
         expect(that.immediatePromise).toBe(3);
         done();
       });
     });
     it('is contagious to other rules that reference it.', (done) => {
-      Rule.attach(that, 'promisedA', () => Promise.resolve(3));
-      Rule.attach(that, 'referenceA', (self) => self.promisedA + 1);
+      Rule.attach(that, 'promisedA', function() {return Promise.resolve(3);});
+      Rule.attach(that, 'referenceA', function() {return this.promisedA + 1;});
       that.referenceA.then((resolved) => {
         expect(resolved).toBe(4);
         expect(that.referenceA).toBe(4);
@@ -882,9 +940,9 @@ expensive compute b`);
       });
     });
     it('propogates resolutions through chains.', (done) => {
-      Rule.attach(that, 'chainA', () => Promise.resolve(3));
-      Rule.attach(that, 'chainB', (self) => self.chainA + 1);
-      Rule.attach(that, 'chainC', (self) => self.chainB + 1);            
+      Rule.attach(that, 'chainA', function() {return Promise.resolve(3);});
+      Rule.attach(that, 'chainB', function() {return this.chainA + 1;});
+      Rule.attach(that, 'chainC', function() {return this.chainB + 1;});            
       that.chainC.then((resolved) => {
         expect(resolved).toBe(5);
         expect(that.chainC).toBe(5);
@@ -893,9 +951,9 @@ expensive compute b`);
     });                  
     it('propogates rejections through contagious chains (rather than unchained/unhandled).', (done) => {
       var that = {};
-      Rule.attach(that, 'chainA', () => Promise.reject(3));
-      Rule.attach(that, 'chainB', (self) => self.chainA + 1);
-      Rule.attach(that, 'chainC', (self) => self.chainB + 1);
+      Rule.attach(that, 'chainA', function() {return Promise.reject(3);});
+      Rule.attach(that, 'chainB', function() {return this.chainA + 1;});
+      Rule.attach(that, 'chainC', function() {return this.chainB + 1;});
       that.chainC.catch((reason) => {
         expect(reason).toBe(3);
         done();
@@ -904,8 +962,8 @@ expensive compute b`);
     it('properly caches rules that were resolved promises.', done => {
       var count = 0,
           data = Rule.rulify({
-            delayed: () => Promise.resolve(17),
-            referencing: self => { count++; return self.delayed; }
+            delayed: function() {return Promise.resolve(17);},
+            referencing: function() { count++; return this.delayed; }
           });
       data.referencing.then(() => {
         expect(count).toBe(2);
@@ -916,11 +974,10 @@ expensive compute b`);
     });
     it('can refer to promise rule chains.', done => {
       var data = Rule.rulify({
-        a: () => Promise.resolve(1),
-        b: self => Promise.resolve(self.a),
-        c: self => Promise.resolve(self.b),
-        d: self => self.a + self.b + self.c
-      });
+        a: function() {return Promise.resolve(1);},
+        b: function() {return Promise.resolve(this.a);},
+        c: function() {return Promise.resolve(this.b);},
+	d: function() {return this.a + this.b + this.c;}});
       data.d.then(d => {
         expect(d).toBe(3);
         done();
@@ -929,15 +986,17 @@ expensive compute b`);
     describe('can handle multiple promise references', function () {
       it('in a rule.', function (done) {
         var that = {};
-        Rule.attach(that, 'a', () => Promise.resolve(1));
-        Rule.attach(that, 'b', self =>
-          new Promise(resolve => setTimeout(() => resolve(self.a + 1), 100)));
-        Rule.attach(that, 'c', self =>
-          new Promise(resolve => setTimeout(() => resolve(self.a + 2), 100)));
-        Rule.attach(that, 'd', () => Promise.resolve(0));            
+        Rule.attach(that, 'a', function() {return Promise.resolve(1);});
+        Rule.attach(that, 'b', function () {
+          return new Promise(resolve => setTimeout(() => resolve(this.a + 1), 100));
+	});
+        Rule.attach(that, 'c', function () {
+          return new Promise(resolve => setTimeout(() => resolve(this.a + 2), 100));
+	});
+        Rule.attach(that, 'd', function() {return Promise.resolve(0);});
         Rule.attach(that, 'e');
         that.e = Promise.resolve(0); // even explicitly set, not from method
-        Rule.attach(that, 'f', self => self.a + self.b + self.c + self.d + self.e);
+        Rule.attach(that, 'f', function() {return this.a + this.b + this.c + this.d + this.e;});
         that.f.then((f) => {
           expect(that.a).toBe(1);
           expect(that.b).toBe(2);
@@ -945,23 +1004,25 @@ expensive compute b`);
           expect(that.d).toBe(0);
           expect(that.e).toBe(0);                
           expect(that.f).toBe(6);
-          expect(f).toBe(6);                
+          expect(f).toBe(6);
           done();
         });
       });
       it('in a referenced rule.', function (done) {
         // Same as above, but with f referenced by another.
         var that = {};
-        Rule.attach(that, 'a', () => Promise.resolve(1));
-        Rule.attach(that, 'b', self =>
-          new Promise(resolve => setTimeout(() => resolve(self.a + 1), 100)));
-        Rule.attach(that, 'c', self =>
-          new Promise(resolve => setTimeout(() => resolve(self.a + 2), 100)));
-        Rule.attach(that, 'd', () => Promise.resolve(0));            
+        Rule.attach(that, 'a', function() {return Promise.resolve(1);});
+        Rule.attach(that, 'b', function () {
+          return new Promise(resolve => setTimeout(() => resolve(this.a + 1), 100));
+	});
+        Rule.attach(that, 'c', function () {
+          return new Promise(resolve => setTimeout(() => resolve(this.a + 2), 100));
+	});
+        Rule.attach(that, 'd', function() {return Promise.resolve(0);});
         Rule.attach(that, 'e');
         that.e = Promise.resolve(0); // even explicitly set, not from method
-        Rule.attach(that, 'f', self => self.a + self.b + self.c + self.d + self.e);
-        Rule.attach(that, 'g', self => self.f);
+        Rule.attach(that, 'f', function() {return this.a + this.b + this.c + this.d + this.e;});
+        Rule.attach(that, 'g', function() {return this.f;});
         that.g.then((g) => {
           expect(that.a).toBe(1);
           expect(that.b).toBe(2);
@@ -990,12 +1051,12 @@ expensive compute b`);
     });
     it('when chained to other rulified objects with promises will resolve in a rule.', done => {
       var data = Rule.rulify({
-        a: () => Promise.resolve(Rule.rulify({
-          b: () => Promise.resolve(Rule.rulify({
-            c: () => Promise.resolve(17)
-          }))
-        })),
-        chainRule: self => self.a.b.c
+        a() {return Promise.resolve(Rule.rulify({
+          b() {return Promise.resolve(Rule.rulify({
+            c() {return Promise.resolve(17);}
+          }));}
+        }));},
+        chainRule() {return this.a.b.c; }
       });
       data.chainRule.then(result => {
         expect(result).toBe(17);
@@ -1004,11 +1065,11 @@ expensive compute b`);
     });
     it('when chained to other rulified objects with promises will not resolve outside a rule.', done => {
       var data = Rule.rulify({
-        a: () => Promise.resolve(Rule.rulify({
-          b: () => Promise.resolve(Rule.rulify({
-            c: () => Promise.resolve(17)  // won't get here
-          }))
-        }))
+        a() {return Promise.resolve(Rule.rulify({
+          b() {return Promise.resolve(Rule.rulify({
+            c() {return Promise.resolve(17);}  // won't get here
+          }));}
+        }));}
       });
       expect(() => data.a.b.c.then(() => "won't get here")).toThrowError();
       done();
@@ -1128,18 +1189,18 @@ expensive compute b`);
             }
             var history = [],
 		data = Rule.rulify({
-                  a: self => recordedDelayedValue('a', Rule.rulify([1])),
-                  b: self => recordedDelayedValue('b', {c: 2}),
-                  d: self => recordedDelayedComputation('d', () => Rule.rulify({e: self => recordedDelayedValue('e', {f: 3})})),
-                  z: self => {
+                  a: function() {return recordedDelayedValue('a', Rule.rulify([1]));},
+                  b: function() {return recordedDelayedValue('b', {c: 2});},
+                  d: function() {return recordedDelayedComputation('d', () => Rule.rulify({e: function() {return recordedDelayedValue('e', {f: 3});}}));},
+                  z: function () {
                     history.push('start z');
-                    let referenceThroughLength = self.a.length - self.a.length;
-                    const result = self.a[referenceThroughLength] + self.b.c + self.d.e.f;
+                    let referenceThroughLength = this.a.length - this.a.length;
+                    const result = this.a[referenceThroughLength] + this.b.c + this.d.e.f;
                     history.push('finish z');
                     return result;
                   },
-                  reference: self => self.z,
-                  refA: self => self.a.map(e => e)
+                  reference: function() {return this.z;},
+		  refA: function() {return this.a.map(e => e);}
 		});
             function check(final, aPart = []) {
               expect(final).toBe(data.z);
@@ -1242,13 +1303,13 @@ expensive compute b`);
 	describe('for immediate side-effect', function () {
           function assignment(v) { return assigned = v; }
           it('before caching.', function () {
-            let instance = Rule.attach({}, 'foo', () => 17, {assignment});
+            let instance = Rule.attach({}, 'foo', function() {return 17;}, {assignment});
             instance.foo = 16;
             expect(instance.foo).toBe(16);
             expect(assigned).toBe(16);
           });
           it('after caching.', function () {
-            let instance = Rule.attach({}, 'foo', () => 17, {assignment});
+            let instance = Rule.attach({}, 'foo', function() {return 17;}, {assignment});
             expect(instance.foo).toBe(17);
             expect(assigned).toBeUndefined();
             instance.foo = 18;
@@ -1269,14 +1330,14 @@ expensive compute b`);
             }, 500));
           }
           it('before caching.', async function () {
-            let instance = Rule.attach({}, 'foo', () => 17, {assignment});
+            let instance = Rule.attach({}, 'foo', function() {return 17;}, {assignment});
             instance.foo = 16;
             expect(instance.foo instanceof Promise).toBeTruthy();
             expect(await instance.foo).toBe(16);
             expect(assigned).toBe(16);
           });
           it('after caching.', async function () {
-            let instance = Rule.attach({}, 'foo', () => 17, {assignment});
+            let instance = Rule.attach({}, 'foo', function() {return 17;}, {assignment});
             expect(instance.foo).toBe(17);
             expect(assigned).toBeUndefined();
             instance.foo = 18;
@@ -1302,7 +1363,7 @@ expensive compute b`);
       it('prints rules as [class [instance] key]', function () {
 	let array = [1, 2],
             proxied = Rule.rulify(array),
-            object = {someRule: self => proxied[0]};
+            object = {someRule: function() {return proxied[0];}}
 	Rule.rulify(object);
 	object.toString = () => "[fred]";
 	expect(object.someRule).toBe(1);
