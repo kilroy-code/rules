@@ -1,4 +1,6 @@
-# Rules [![npm test](https://github.com/kilroy-code/rules/actions/workflows/npm-test.yml/badge.svg)](https://github.com/kilroy-code/rules/actions/workflows/npm-test.yml)
+# Rules
+
+![npm test](https://github.com/kilroy-code/rules/actions/workflows/npm-test.yml/badge.svg)
 
 Rules let the properties of Javascript instance work like the cells of a spreadsheet. The Rule/properties keep track of each other, and update all and only those other Rules that need to be updated when something changes.
 
@@ -9,6 +11,8 @@ Rules are exactly the same thing, but can be used in any Javascript program. A R
 This style of programming is particularly useful for complex systems, or where different parts of the system are authored by different people or organizations.
 
 While it is easy for rule-based systems to be written in a functional-programming style, rules are also easily integrated with external-systems that depend on side-effects or asynchronous messages.
+
+An example application might be to use rules to [confirm and further act on the response to an AI Large Language Model](ai.md).
 
 This README includes:
 
@@ -555,7 +559,7 @@ An eager rule is simply one that demands itself on the next tick after being res
 
 This kind of system is usually used in cases where it simply would not be possible to write the system without it, never mind run it. In such cases, we're generally happy if it runs within an order of magnitude of hand-crafted "normal" code.
 
-The overall performance is highly dependent on the particular application. For example, suppose that an application depends on maintaining a core set of Rules of modest scale -- say a few hundred or a thousand Rules. There might be 10,000 or more Rules that these depend on. If rendering the application ultimately only has to look at just the core set, and most are cached with only a few updating, then the 10k Rules behind it are not examined at all during a typical rendering frame. In this case, it doesn't matter how long it takes to look at the 10k required rules, because we all have already cached the 1k rules needed for rendering.
+The overall performance is highly dependent on the particular application. For example, suppose that an application depends on maintaining a core set of Rules of modest scale -- say a few hundred or a thousand Rules. There might be 10,000 or more Rules that these depend on. If rendering the application ultimately only has to look at just the core set, and most are cached with only a few updating, then the 10k Rules behind it are not examined at all during a typical rendering frame. In this case, it doesn't matter how long it takes to look at the 10k required rules, because we have already cached the 1k rules needed for rendering.
 
 As it happens, reading a cached value in the current implementation is well within an order of magnitude of an ordinary method call. On Chrome or Edge, it appears to currently be a factor of 2 or 3 slower. 
 
@@ -580,7 +584,7 @@ Opportunities for further work in Rules includes:
 - Simplifying and clarifying the test suite, and documenting it here.
 - Packaging and distribution (npm, unpkg, etc.)
 
-_However, Rules are not being developed in the abstract, but for use within a particular multi-user platform called Ki1r0y. I'm holding off on further changes to Rules until I gain more experience with the needs applied to Ki1r0y._
+_However, Rules are not being developed in the abstract, but for use within a particular multi-user platform called [Ki1r0y](https://github.com/kilroy-code/ki1r0y). I'm holding off on further changes to Rules until I gain more experience with the needs applied to Ki1r0y._
 
 
 

@@ -10,7 +10,7 @@
     "nodejs",
     "browser"
   ],
-  "main": "index.js",
+  "main": "index.mjs",
   "scripts": {
     "test": "jasmine"
   },
