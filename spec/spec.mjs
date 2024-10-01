@@ -170,9 +170,11 @@ describe('A Rule', function () {
       grandparent.length = grandparent.width = 40;
       grandparent.height = 10;
       stepParent.height = stepParent.length = stepParent.width = 20;
-      child.parent = parent;
       parent.parent = grandparent;
       parent.width = 10;
+      beforeEach(function () {
+            child.parent = parent;
+      });
       it('includes kind-of inheritance.', function () {
         expect(child.parent).toBe(parent);
         expect(parent.parent).toBe(grandparent);
