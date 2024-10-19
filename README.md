@@ -56,6 +56,9 @@ console.log(box.area);  // 15!
 ```
 We did not have to tell _area_ that it needed to be recomputed now that _length_ was changed. The system keeps track of the dependencies.
 
+Rules are pure standard Javascript and do not require any bundling or pre-processing, but should be compatible with any.
+Just `import { Rule } from '@kilroy-code/rules';` and do whatever you normally do to make a module available to your application. When minified, it adds about 5k before compression.
+
 Rules are:
 
 - [properties](#properties)
