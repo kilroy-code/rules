@@ -1,4 +1,5 @@
 import { Promisable } from './promisable.mjs';
+import { Tracker } from './tracked.mjs';
 
 // A rule that stores it's sole value for retrieval.
 export class Property extends Promisable {
@@ -6,7 +7,7 @@ export class Property extends Promisable {
     super.init(props);
     // Rules are JIT-instantiated, so cached is never going to be undefined for long. No space-wastage even when no init.
     this.cached = props.init;
-    this.requires = []; // Other rules that WE require, for use in resetReferences.    
+    this.requires = new Tracker(); // Other rules that WE require, for use in resetReferences.
   }
   storeValue(target, property, value) {
     super.storeValue(...arguments);    
@@ -28,12 +29,12 @@ export class Property extends Promisable {
   // To accomplish this, we keep track of the rules that WE require.
   addReference(reference) {
     super.addReference(reference);
-    this.requires.push(reference);
+    this.requires.add(reference);
   }
   resetReferences() {
     let requires = this.requires,
         notUs = element => element !== this;
-    this.requires = [];
+    this.requires = new Tracker();
     super.resetReferences();
     // Remove us from usedBy of everything that we had required.
     requires.forEach(required => required.usedBy = required.usedBy.filter(notUs));

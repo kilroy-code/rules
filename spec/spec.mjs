@@ -1371,7 +1371,7 @@ expensive compute b`);
 	expect(object.someRule).toBe(1);
 	expect(Rule.getRule(object, 'someRule').toString()).toBe("[Computed [fred] someRule]");
 	proxied.forEach(_ => _); // The specific behavior of printing is not defined for elements that have not been demanded.
-	expect(Rule.getRule(object, 'someRule').requires[0].toString()).toBe("[Proxied [1,2] 0]");
+	expect(Rule.getRule(object, 'someRule').requires.any.toString()).toBe("[Proxied [1,2] 0]");
       });
       describe('Reflect.get/set protocol', function () {
 	class Reflector {
