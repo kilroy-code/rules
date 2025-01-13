@@ -38,7 +38,8 @@ export class BaseRule extends BaseClass {
     return `[${this.constructor.name} ${this.instanceLabel || this.instanceToString()} ${this.key}]`;
   }
   instanceToString() { // See Proxied.instanceToString
-    return this.instance.toString();
+    if (this.instance.toString !== Object.prototype.toString || !this.instance.constructor) return this.instance.toString();
+    return `[object ${this.instance.constructor.name}]`;
   }
 
   // get and set can be used directly, exactly as for the Reflect protocol.
