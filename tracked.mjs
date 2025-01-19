@@ -16,6 +16,9 @@ export class Tracker { // A list of WeakRefs, so that required and usedBy do not
   forEach(f) {
     this.items.forEach(e => e.deref() && f(e.deref()));
   }
+  map(f) { // Used in debugging tools.
+    return this.items.map(e => e.deref() && f(e.deref()));
+  }
   filter(f) {
     return new Tracker(this.items.filter(e => e.deref() && f(e.deref())));
   }

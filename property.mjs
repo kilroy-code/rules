@@ -97,4 +97,8 @@ export class Property extends Promisable {
       }
     });
   }
+  // For debugging:
+  static requires(instance, key) { // Returns a list of each [instance, propertyName] pair that the specified rule requires.
+    return this.getRule(instance, key).requires.map(rule => [rule.instance, rule.key]);
+  }
 }
