@@ -382,11 +382,11 @@ Defines `objectOrProto[propertyName]` as a Rule in which `methodOrInit` is the f
 
 ### rulify
 
-`Rule.rulify(object, {ruleNames, eagerNames, configurable, enumerable}) => object`
+`Rule.rulify(object, {ruleNames, eagerNames, configurable, enumerable, defaultAll}) => object`
 
 Creates a rule on `object` for each property named in `ruleNames`.  `configurable` and `enumerable` are as for `Object.defineProperty()`. See [attach](#attach), above. If a name appears in (`ruleNames` and) `eagerNames`, the rule will be eager.
 
-`ruleNames` defaults to a list of each own-property in `object` that is defined with `get` and no `set`. (Currently, if the list is empty, it is populated by every single own-property in `object` except `constructor`. However, this behavior might be dropped in future versions.)
+`ruleNames` defaults to a list of each own-property in `object` that is defined with `get` and no `set`. (Currently, if the list is empty, it is populated by every single own-property in `object` except `constructor`, unless `defaultAll: false` is specified. However, this behavior might be dropped in future versions.)
 
 `Rule.rulify(array) => a rulified Array`
 

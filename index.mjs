@@ -11,19 +11,19 @@ function getterPropertyData(objectOrPrototype) {
 function allRulablePropertyNames(objectOrPrototype) {
   return Object.getOwnPropertyNames(objectOrPrototype).filter(function (prop) { return 'constructor' !== prop; });
 }
-function defaultPropertyRuleNames(objectOrPrototype) {
+function defaultPropertyRuleNames(objectOrPrototype, defaultAll = true) {
   let getterData = getterPropertyData(objectOrPrototype);
   if (getterData.length) return getterData;
-  return allRulablePropertyNames(objectOrPrototype);
+  return defaultAll ? allRulablePropertyNames(objectOrPrototype) : [];
 }
 
 // Convert an entire instance or prototype, or list to Rules.
 // FIXME: let's either call this create or from, or just make it the constructor. (Make a new package version.)
-Rule.rulify = function rulify(object, options = {}) {
+Rule.rulify = function rulify(object, {defaultAll, ...options} = {}) {
   if (Array.isArray(object)) return Proxied.attach(object);
   const {
     ruleClass = Rule, 
-    ruleNames = defaultPropertyRuleNames(object),
+    ruleNames = defaultPropertyRuleNames(object, defaultAll),
     eagerNames = [],
     ...configuration // Might include, e.g., configurable, assignment, ...  See Property.attach().
   } = options;
