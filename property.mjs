@@ -74,10 +74,14 @@ export class Property extends Promisable {
       //  rather than the trap behavior of the instance===Proxy.
       //Reflect.set(objectOrProto, ruleKey, rule, instance); // Set the Rule object (not the value) in instance.
       //Object.defineProperty(instance, ruleKey, {enumerable: false}); // Hide the Rule object from enumeration.
-      Object.defineProperty(instance, ruleKey, {enumerable: false, value: rule}); // Assigns the Rule object in instance and hides it from enumeration.
+      Object.defineProperty(instance, ruleKey, {
+	value: rule,       // Assigns the Rule object in instance.
+	enumerable: false, // Hides it from enumeration.
+	//configurable: true // Allows it to be deleted, if something is re-attached (below). (Introduces a lot performance randomness.)
+      });
       return rule;
     };
-    delete objectOrProto[ruleKey]; // attach clears any previous rule.
+    //delete objectOrProto[ruleKey]; // attach clears any previous rule.
     return Object.defineProperty(objectOrProto, key, {
       // Within these functions, objectOrProto might not equal this, as objectOrProto could be a __proto__.
       enumerable, ...descriptors,
