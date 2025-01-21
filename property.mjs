@@ -46,6 +46,8 @@ export class Property extends Promisable {
   static attach(objectOrProto, key, methodOrInit, {assignment = (value => value), enumerable = true, ...descriptors} = {}) {
     // Defines a Rule property on object, which may be an individual instance or a prototype.
     // If a method function is provided it is used to lazily calculate the value when read, if not already set.
+    // Note: If objectOrProto is a prototype, enumeraable controls whether key is enumerable in the proto, not the instance.
+    // Thus it will show up in for...in enumeration of the instance, but not Object.keys.
     var ruleKey = '_' + key, // Why does it take so much longer to do: this.ruleKey(key),
         methodKey = '__' + key,
         isMethod = methodOrInit instanceof Function,
@@ -53,6 +55,7 @@ export class Property extends Promisable {
         init = isMethod ? undefined : methodOrInit;
     if (method) {
       objectOrProto[methodKey] = method;
+      Object.defineProperty(objectOrProto, methodKey, {enumerable: false}); // Hide the method from for...in enumeration.
     }
     let ensureRule = (instance) => {
       // The actual Rule object is added lazilly, only when the property is first accessed (by get or set).
@@ -69,11 +72,9 @@ export class Property extends Promisable {
       //  However, Reflect.set uses property descriptor of the target===objectOrProto. In this case, there is no descriptor
       //  for ruleKey (e.g., with a leading underscore), but I _think_ that Reflect.set then uses the default Object property assignment behavior,
       //  rather than the trap behavior of the instance===Proxy.
-      Reflect.set(objectOrProto, ruleKey, rule, instance);
-      //Object.defineProperty(instance, ruleKey, {enumerable: false}); // Doesn't really accomplish anything for us when objectOrProto is a prototype.
-      //let descriptor = Object.getOwnPropertyDescriptor(objectOrProto, key);
-      //descriptor.enumerable = true;
-      //Object.defineProperty(instance, key, {enumerable: true});
+      //Reflect.set(objectOrProto, ruleKey, rule, instance); // Set the Rule object (not the value) in instance.
+      //Object.defineProperty(instance, ruleKey, {enumerable: false}); // Hide the Rule object from enumeration.
+      Object.defineProperty(instance, ruleKey, {enumerable: false, value: rule}); // Assigns the Rule object in instance and hides it from enumeration.
       return rule;
     };
     delete objectOrProto[ruleKey]; // attach clears any previous rule.
