@@ -579,20 +579,22 @@ describe('A Rule', function () {
         methods.forEach(element => element.someValue());
         rules.forEach(element => element.someValue);
       }
-      // Factors on Intel Mac June '22:
-      //   Chrome:  2
-      //   Edge:    3
-      //   Safari: 18
-      //   Firefox:20
+      // Factors on Intel Mac June '25, June '22:
+      //   Chrome:   2, 2
+      //   Edge:     4, 3
+      //   Safari:  14, 18
+      //   Firefox: 17, 20
+      //   NodeJS:   3
       // Initial version was 12 => 25. Second was 4-5 on Chrome.
       compare(evaluate, 'subsequentRuleMs', 5, 60);
     });
     it('first computation after reset is never > 120x method and test will skip/warn if > 25x (see console).', function () {
       // Factors on Intel Mac June '22:
-      //   Chrome:  23 - Why is Chrome and Edge SLOWER after a reset? Breaks some optimization? Does that mean test is invalid?
-      //   Edge:    32
-      //   Safari:  23
-      //   Firefox: 18
+      //   Chrome:   9,23
+      //   Edge:    34, 32 // Consistently slower than initial, as Chrome used to be.
+      //   Safari:  22, 23
+      //   Firefox: 23, 18
+      //   NodeJS:  18
       function evaluateAndReset(methods, rules) {
         methods.forEach(element => element.someValue());
         rules.forEach(element => element.someValue);   // Instantiate the rule...
@@ -602,15 +604,16 @@ describe('A Rule', function () {
     });
     it('of lazy creation of rule and tracked computation is never > 110x method and test will skip/warn if > 55x (see console).', async function () {
       // Factors on Intel Mac June '22:
-      //   Chrome:  15
-      //   Edge:    20
-      //   Safari:  38
-      //   Firefox: 85
+      //   Chrome:  13, 15
+      //   Edge:    19, 20
+      //   Safari:  52, 38
+      //   Firefox: 87, 85
+      //   NodeJS:  31
       function justTouch(methods, rules) { // Does not demand rule, so these instances do not have the rule instantiated yet.
         methods.forEach(element => element);
         rules.forEach(element => element);
       }
-      compare(justTouch, 'initialLazyRuleInvocationMs', 55, 110);
+      compare(justTouch, 'initialLazyRuleInvocationMs', 55, 120);
     });
   });
   describe('using this and self', function () {
