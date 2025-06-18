@@ -1,6 +1,6 @@
 {
   "name": "@kilroy-code/rules",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Cached, demand-driven computations with dependency-directed-backtracking and full support for Promises.",
   "keywords": [
     "demand-driven",
@@ -10,7 +10,10 @@
     "nodejs",
     "browser"
   ],
-  "exports": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./index.mjs": "./index.mjs"
+  },
   "scripts": {
     "test": "jasmine"
   },
