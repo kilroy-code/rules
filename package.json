@@ -1,6 +1,6 @@
 {
   "name": "@kilroy-code/rules",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Cached, demand-driven computations with dependency-directed-backtracking and full support for Promises.",
   "keywords": [
     "demand-driven",
@@ -10,7 +10,7 @@
     "nodejs",
     "browser"
   ],
-  "main": "index.mjs",
+  "exports": "index.mjs",
   "scripts": {
     "test": "jasmine"
   },
@@ -31,7 +31,7 @@
     "registry": "https://npm.pkg.github.com"
   },
   "devDependencies": {
-    "jasmine": "^5.3.1",
-    "@kilroy-code/utilities": "^1.0.7"
+    "jasmine": "^5.7.1",
+    "@kilroy-code/utilities": "^1.0.9"
   }
 }
